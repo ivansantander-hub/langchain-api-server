@@ -8,34 +8,66 @@ import { createApiServer } from './api.js';
 export async function initializeChat() {
   console.log('Initializing chat application with documents...');
   
-  // Load and process all documents for combined vector store
-  const docs = await loadDocuments();
-  const splitDocs = await splitDocuments(docs);
-  
   // Create embeddings and vector store manager
   const embeddings = createEmbeddings();
   const vectorStoreManager = new VectorStoreManager(embeddings);
   
-  // Create combined vector store with all documents
-  console.log('Setting up combined vector store...');
-  await vectorStoreManager.loadOrCreateVectorStore('combined', splitDocs);
+  // Check if combined store exists first before loading all documents
+  let combinedStoreExists = vectorStoreManager.storeExists('combined');
   
-  // Process each document individually and create separate vector stores
-  console.log('Processing individual documents...');
+  // Get available documents
   const documentNames = listAvailableDocuments();
+  console.log(`Found ${documentNames.length} documents in docs directory`);
+  
+  // Create or load combined vector store
+  if (!combinedStoreExists) {
+    // If combined store doesn't exist, create it with all documents
+    console.log('Creating combined vector store from all documents...');
+    const docs = await loadDocuments();
+    const splitDocs = await splitDocuments(docs);
+    await vectorStoreManager.loadOrCreateVectorStore('combined', splitDocs);
+  } else {
+    // Load existing combined store
+    console.log('Loading existing combined vector store...');
+    await vectorStoreManager.loadOrCreateVectorStore('combined');
+  }
+  
+  // Get existing vector stores (other than combined)
+  const existingStores = new Set(
+    vectorStoreManager.getAvailableStores().filter(store => store !== 'combined')
+  );
+  
+  // Process each document
+  console.log('Processing individual documents...');
   
   for (const docName of documentNames) {
     // Get the store name from the document name (without extension)
     const storeName = docName.replace(/\.[^/.]+$/, "");
-    console.log(`Processing document for individual vectorization: ${docName}`);
     
-    try {
-      const singleDoc = await loadSingleDocument(docName);
-      const splitSingleDoc = await splitDocuments(singleDoc);
-      await vectorStoreManager.loadOrCreateVectorStore(storeName, splitSingleDoc);
-      console.log(`Created vector store for document: ${storeName}`);
-    } catch (error) {
-      console.error(`Error processing document ${docName}:`, error);
+    // Check if this document already has an individual vector store
+    const isNewDocument = !existingStores.has(storeName);
+    
+    if (isNewDocument) {
+      console.log(`New document detected: ${docName}, creating vector store...`);
+      try {
+        // Load and process the document
+        const singleDoc = await loadSingleDocument(docName);
+        const splitSingleDoc = await splitDocuments(singleDoc);
+        
+        // Add to both individual and combined stores
+        await vectorStoreManager.addDocumentToVectorStores(docName, splitSingleDoc);
+        console.log(`Added new document ${docName} to vector stores`);
+      } catch (error) {
+        console.error(`Error processing new document ${docName}:`, error);
+      }
+    } else {
+      console.log(`Processing existing document: ${docName}`);
+      try {
+        // Just load the individual vector store
+        await vectorStoreManager.loadOrCreateVectorStore(storeName);
+      } catch (error) {
+        console.error(`Error loading vector store for ${docName}:`, error);
+      }
     }
   }
   

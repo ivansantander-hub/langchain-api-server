@@ -57,6 +57,36 @@ export class VectorStoreManager {
     }
   }
   
+  // Add a document to both individual and combined vector stores
+  async addDocumentToVectorStores(documentName: string, documentChunks: Document[]): Promise<void> {
+    // Get store name from document name (without extension)
+    const storeName = documentName.replace(/\.[^/.]+$/, "");
+    
+    console.log(`Adding document ${documentName} to vector stores...`);
+    
+    try {
+      // 1. Add to individual vector store
+      console.log(`Adding to individual store: ${storeName}`);
+      const individualStore = await this.loadOrCreateVectorStore(storeName, documentChunks);
+      // If the store already existed, add the new chunks
+      if (this.storeExists(storeName)) {
+        await individualStore.addDocuments(documentChunks);
+        await individualStore.save(path.join(this.baseDir, storeName));
+      }
+      
+      // 2. Add to combined vector store
+      console.log('Adding to combined store');
+      const combinedStore = await this.loadOrCreateVectorStore('combined');
+      await combinedStore.addDocuments(documentChunks);
+      await combinedStore.save(path.join(this.baseDir, 'combined'));
+      
+      console.log(`Document ${documentName} successfully added to both stores`);
+    } catch (error) {
+      console.error(`Error adding document ${documentName} to vector stores:`, error);
+      throw error;
+    }
+  }
+  
   // Get a retriever for a specific vector store
   getRetriever(storeName: string, k: number = 5) {
     if (!this.vectorStores.has(storeName)) {

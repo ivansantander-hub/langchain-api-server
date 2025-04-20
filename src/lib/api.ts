@@ -1,9 +1,20 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
 import cors from 'cors';
 import { RetrievalQAChain } from 'langchain/chains';
 import { ChatOpenAI } from '@langchain/openai';
 import { VectorStoreManager } from './vectorstore.js';
 import { createChatChain } from './model.js';
+import { saveUploadedDocument, loadSingleDocument, splitDocuments } from './document.js';
+
+interface AddDocumentRequest {
+  filename: string;
+  content: string;
+}
+
+interface ChatRequest {
+  question: string;
+  vectorStore?: string;
+}
 
 // Create Express app with support for multiple vector stores
 export function createApiServer(
@@ -16,21 +27,22 @@ export function createApiServer(
 
   // Middleware
   app.use(cors());
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' }));
 
   // Home route
-  app.get('/', (req: Request, res: Response) => {
+  app.get('/', (req, res) => {
     res.json({ 
       message: 'LangChain Document Chat API', 
       endpoints: {
         '/api/chat': 'POST - Send a question to get an answer from the documents',
-        '/api/vector-stores': 'GET - List all available vector stores'
+        '/api/vector-stores': 'GET - List all available vector stores',
+        '/api/add-document': 'POST - Upload and add a document to vector stores'
       }
     });
   });
 
   // Endpoint to list all available vector stores
-  app.get('/api/vector-stores', (req: Request, res: Response) => {
+  app.get('/api/vector-stores', (req, res) => {
     const stores = vectorStoreManager.getAvailableStores();
     res.json({
       stores,
@@ -38,10 +50,44 @@ export function createApiServer(
     });
   });
 
-  // Chat endpoint with optional vector store selection
-  app.post('/api/chat', async (req: Request, res: Response) => {
+  // Endpoint to add a document to vector stores
+  app.post('/api/add-document', async (req: any, res: any) => {
     try {
-      const { question, vectorStore } = req.body;
+      const { filename, content } = req.body as AddDocumentRequest;
+      
+      if (!filename || !content) {
+        return res.status(400).json({ error: 'filename and content are required' });
+      }
+
+      console.log(`Received document upload request: ${filename}`);
+      
+      // Save the document to the docs directory
+      const savedFilename = await saveUploadedDocument(content, filename);
+      
+      // Load and process the document
+      const docLoaded = await loadSingleDocument(savedFilename);
+      const docChunks = await splitDocuments(docLoaded);
+      
+      // Add to vector stores (individual and combined)
+      await vectorStoreManager.addDocumentToVectorStores(savedFilename, docChunks);
+      
+      res.json({ 
+        message: `Document ${savedFilename} successfully added to vector stores`,
+        vectorStores: [
+          savedFilename.replace(/\.[^/.]+$/, ""), // Individual store
+          'combined' // Combined store
+        ]
+      });
+    } catch (error) {
+      console.error('Error processing document upload:', error);
+      res.status(500).json({ error: 'Failed to process document upload' });
+    }
+  });
+
+  // Chat endpoint with optional vector store selection
+  app.post('/api/chat', async (req, res) => {
+    try {
+      const { question, vectorStore } = req.body as ChatRequest;
       console.log('🚀 ~ app.post ~ question:', question)
       console.log('🚀 ~ app.post ~ vectorStore:', vectorStore)
       
@@ -106,6 +152,7 @@ export function createApiServer(
         console.log(`\nAPI server running at http://localhost:${PORT}`);
         console.log('You can send questions to /api/chat endpoint');
         console.log('To specify a vector store, include "vectorStore" in your request');
+        console.log('You can add documents using the /api/add-document endpoint');
         resolve();
       });
     });

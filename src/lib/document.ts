@@ -32,6 +32,24 @@ export async function loadSingleDocument(filename: string): Promise<Document[]> 
   return docs;
 }
 
+// Save an uploaded document to the docs directory
+export async function saveUploadedDocument(fileContent: string, filename: string): Promise<string> {
+  // Ensure docs directory exists
+  if (!fs.existsSync('./docs')) {
+    fs.mkdirSync('./docs', { recursive: true });
+  }
+  
+  // Ensure the filename has .txt extension
+  const sanitizedFilename = filename.endsWith('.txt') ? filename : `${filename}.txt`;
+  const filepath = path.join('./docs', sanitizedFilename);
+  
+  // Write the file
+  fs.writeFileSync(filepath, fileContent, 'utf8');
+  console.log(`Document saved to: ${filepath}`);
+  
+  return sanitizedFilename;
+}
+
 // List all available documents in the docs directory
 export function listAvailableDocuments(): string[] {
   if (!fs.existsSync('./docs')) {
