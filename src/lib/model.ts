@@ -15,6 +15,7 @@ export function createChatChain(model: ChatOpenAI, retriever: any) {
   const memory = new BufferMemory({
     memoryKey: "chat_history",
     returnMessages: true,
+    outputKey: "text"
   });
   
   return RetrievalQAChain.fromLLM(model, retriever, {
