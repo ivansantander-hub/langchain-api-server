@@ -1,0 +1,51 @@
+# Frontend Document Management System
+
+Sistema de gestión de documentos desarrollado con Next.js, React y Prisma. Esta documentación proporciona una guía completa para desarrolladores, administradores y usuarios del sistema.
+
+## Información General
+
+El Sistema de Gestión de Documentos es una aplicación web moderna diseñada para facilitar el manejo, almacenamiento y procesamiento de documentos digitales. Construida con tecnologías web modernas, ofrece una interfaz intuitiva para la administración documental.
+
+### Características Principales
+
+- Visualización y manejo de documentos PDF
+- Sistema de autenticación y autorización
+- Gestión de flujos de trabajo documentales
+- Interfaz de usuario adaptativa con material-UI y Tailwind
+
+## Stack Tecnológico
+
+El proyecto está desarrollado con las siguientes tecnologías:
+
+- **Next.js 14 (React Framework)**
+- **React 18**
+- **TypeScript**
+- **Prisma ORM**
+- **Material UI**
+- **Tailwind CSS**
+- **NextAuth para autenticación**
+- **React PDF Viewer**
+- **Jotai para gestión de estado**
+
+## Secciones de la Documentación
+
+La documentación está organizada en las siguientes secciones:
+
+1. **Guía de Instalación** - Configuración del entorno y pasos para instalar el proyecto.
+2. **Arquitectura** - Descripción detallada de la estructura del proyecto y sus componentes.
+3. **Guía de Desarrollo** - Buenas prácticas y estándares de desarrollo para el proyecto.
+4. **API y Servicios** - Documentación de las APIs y servicios utilizados.
+5. **Flujos de Trabajo** - Descripción de los flujos de trabajo para la gestión de documentos.
+6. **Gestión de Estado** - Guía sobre el manejo de estado con Jotai y patrones utilizados.
+7. **Configuración y Variables de Entorno** - Referencia para la configuración del proyecto.
+8. **Despliegue** - Guía para desplegar la aplicación en diferentes entornos.
+9. **Pruebas** - Estrategias y guías para las pruebas del proyecto.
+
+## Convenciones del Proyecto
+
+Este proyecto sigue un conjunto de convenciones para mantener un código limpio y consistente:
+
+- Se utiliza TypeScript para todo el código
+- Arquitectura de componentes siguiendo patrones de Atomic Design
+- Gestión de estado centralizada con Jotai
+- Uso de ESLint y Prettier para mantener la calidad del código

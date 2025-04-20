@@ -1,0 +1,426 @@
+Esta documentación detalla los hooks utilizados para el sistema de carga de archivos en la aplicación de gestión de documentos. El sistema utiliza un enfoque modular donde varios hooks trabajan en conjunto para proporcionar una experiencia de carga de archivos robusta y eficiente.
+
+Estos hooks implementan funcionalidades clave como carga multiparte para archivos grandes, gestión de estado, cola de carga, y acciones de carga (cancelar, eliminar, etc.).
+
+## 1. useFileUpload
+
+Hook principal que coordina todo el proceso de carga de archivos. Funciona como una fachada para los otros hooks especializados.
+
+### Descripción
+
+useFileUpload es el hook principal que integra las funcionalidades de los otros hooks relacionados con la carga de archivos. Proporciona una interfaz unificada para el componente de carga de archivos y coordina el flujo de trabajo del proceso de carga.
+
+### Métodos principales
+
+- handleSelectionChange: Procesa archivos seleccionados y los añade a la lista de carga.
+- handleUploadAll: Inicia el proceso de carga para todos los archivos pendientes.
+- resetUpload: Reinicia el estado de carga y cancela cargas activas.
+- cancelUpload: Cancela la carga de un archivo específico.
+- cancelAllUploads: Cancela todas las cargas activas.
+- deleteUpload: Elimina un archivo ya cargado del sistema.
+
+### Ejemplo de uso
+
+```jsx
+import { useFileUpload } from '@/hooks/upload';
+
+const FileUploadComponent = () => {
+  const {
+    uploadItems,
+    isUploading,
+    handleSelectionChange,
+    handleUploadAll,
+    cancelUpload,
+    cancelAllUploads,
+    resetUpload,
+    deleteUpload
+  } = useFileUpload();
+
+  const handleFileSelection = (event) => {
+    handleSelectionChange(event.target.files);
+  };
+
+  return (
+    <div>
+      <input type="file" onChange={handleFileSelection} multiple />
+      <button onClick={handleUploadAll}>Subir Archivos</button>
+      
+      {uploadItems.map(item => (
+        <div key={item.id}>
+          <span>{item.file.name} - {item.status}</span>
+          <progress value={item.progress} max="100" />
+          {item.status === 'uploading' && (
+            <button onClick={() => cancelUpload(item.id)}>Cancelar</button>
+          )}
+          {item.status === 'completed' && (
+            <button onClick={() => deleteUpload(item.id)}>Eliminar</button>
+          )}
+        </div>
+      ))}
+      
+      {isUploading && <button onClick={cancelAllUploads}>Cancelar Todo</button>}
+      <button onClick={resetUpload}>Reiniciar</button>
+    </div>
+  );
+};
+```
+
+### Flujo de comunicación
+
+useFileUpload sirve como punto de entrada para los componentes de UI y coordina las interacciones entre los demás hooks:
+
+- Utiliza useUploadState para gestionar el estado global de la carga.
+- Utiliza useUploadQueue para manejar la cola de archivos pendientes.
+- Utiliza useMultipartUpload para la carga de archivos grandes en partes.
+- Utiliza useUploadActions para las acciones del usuario (cancelar, eliminar, etc.).
+
+Cuando se inicia una carga con handleUploadAll, useFileUpload activa el procesamiento de la cola a través de useUploadQueue, que a su vez utiliza useMultipartUpload para cada archivo. El progreso y estado se actualiza usando funciones de useUploadState.
+
+## 2. useUploadState
+
+Hook que gestiona el estado global del sistema de carga de archivos.
+
+### Descripción
+
+useUploadState es responsable de manejar el estado central para todo el proceso de carga. Utiliza átomos de Jotai para compartir el estado entre componentes y proporciona funciones de utilidad para actualizar y gestionar este estado.
+
+### Estado principal
+
+- uploadItems: Array de elementos que se están cargando, con información como nombre, progreso, estado, etc.
+- isUploading: Indica si hay cargas en proceso.
+- allUploadsCompleted: Indica si todas las cargas han finalizado (exitosas o no).
+- overallProgress: Progreso general de todas las cargas.
+- Referencias importantes (activeUploadsRef, processingQueueRef, cancelUploadInProgressRef).
+
+### Métodos principales
+
+- updateProgress: Actualiza el progreso y estado de un archivo específico.
+- updateOverallProgress: Recalcula el progreso general de todas las cargas.
+- resetUploadState: Reinicia todo el estado de carga a sus valores iniciales.
+- getUploadSummary: Obtiene un resumen de las cargas (completadas, fallidas, canceladas).
+- showUploadSummary: Genera un mensaje de resumen legible.
+- formatFileSize: Utilidad para formatear tamaños de archivo en unidades legibles (KB, MB).
+
+### Ejemplo de uso
+
+```jsx
+import { useUploadState } from '@/hooks/upload';
+
+const UploadStateComponent = () => {
+  const {
+    uploadItems,
+    isUploading,
+    overallProgress,
+    updateProgress,
+    resetUploadState,
+    getUploadSummary,
+    showUploadSummary,
+    formatFileSize
+  } = useUploadState();
+
+  // Mostrar progreso total
+  const renderProgress = () => (
+    <div>
+      <progress value={overallProgress} max="100" />
+      <span>{overallProgress}%</span>
+    </div>
+  );
+
+  // Mostrar resumen al finalizar
+  const renderSummary = () => {
+    const { completed, failed, cancelled, total } = getUploadSummary();
+    return (
+      <div>
+        <p>Resumen: {showUploadSummary()}</p>
+        <p>Completadas: {completed}/{total}</p>
+        <p>Fallidas: {failed}/{total}</p>
+        <p>Canceladas: {cancelled}/{total}</p>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      {isUploading ? renderProgress() : renderSummary()}
+      <button onClick={resetUploadState}>Limpiar</button>
+      
+      {/* Lista de archivos */}
+      <ul>
+        {uploadItems.map(item => (
+          <li key={item.id}>
+            {item.file.name} - {formatFileSize(item.file.size)} - {item.status}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+```
+
+### Flujo de comunicación
+
+useUploadState es el hub central de estado para todo el sistema de carga:
+
+- Proporciona el estado a useFileUpload, que lo expone a los componentes de UI.
+- Recibe actualizaciones de progreso desde useMultipartUpload cuando se está cargando un archivo.
+- useUploadActions utiliza sus métodos para actualizar el estado cuando se realizan acciones como cancelar o eliminar.
+- useUploadQueue consulta su estado para determinar qué archivos deben cargarse a continuación.
+
+El método updateProgress es especialmente importante, ya que es llamado frecuentemente durante la carga y mantiene sincronizado el estado general con el progreso real de cada archivo. Implementa optimizaciones para evitar actualizaciones de estado innecesarias cuando los cambios de progreso son muy pequeños.
+
+## 3. useUploadQueue
+
+Hook que gestiona la cola de carga de archivos y controla el procesamiento secuencial.
+
+### Descripción
+
+useUploadQueue es responsable de gestionar la cola de archivos pendientes de carga. Se asegura de que los archivos se carguen de manera ordenada y controlada, evitando sobrecargar el sistema con demasiadas cargas simultáneas.
+
+### Métodos principales
+
+- processUploadQueue: Procesa la cola de carga, iniciando la carga para los archivos pendientes.
+- checkAndProcessQueue: Verifica si hay archivos pendientes y, en caso afirmativo, procesa la cola.
+
+### Ejemplo de uso
+
+```jsx
+import { useUploadQueue } from '@/hooks/upload';
+
+const UploadQueueHandler = ({ uploadItems, isUploading, setIsUploading, ... }) => {
+  const { checkAndProcessQueue, processUploadQueue } = useUploadQueue(
+    uploadItems,
+    isUploading,
+    setIsUploading,
+    cancelUploadInProgressRef,
+    setProcessingQueue,
+    isProcessingQueue,
+    uploadItemProcessor
+  );
+
+  // Iniciar el procesamiento de la cola
+  const startUpload = async () => {
+    if (uploadItems.length > 0 && !isUploading) {
+      setIsUploading(true);
+      await processUploadQueue();
+    }
+  };
+
+  // Este efecto se asegura de que la cola se procese cuando hay elementos
+  useEffect(() => {
+    if (isUploading) {
+      checkAndProcessQueue();
+    }
+  }, [isUploading, uploadItems]);
+
+  return (
+    <button onClick={startUpload} disabled={isUploading || uploadItems.length === 0}>
+      Iniciar carga
+    </button>
+  );
+};
+```
+
+### Flujo de comunicación
+
+useUploadQueue coordina el proceso de carga de la siguiente manera:
+
+- useFileUpload inicia el proceso llamando a processUploadQueue.
+- processUploadQueue busca en el estado (proporcionado por useUploadState) elementos con status='pending'.
+- Para cada archivo pendiente, llama a la función uploadItemProcessor (que normalmente es una referencia a la función uploadMultipart de useMultipartUpload).
+- Cuando se completa una carga (o se cancela), useUploadQueue es notificado mediante checkAndProcessQueue, lo que permite iniciar la carga del siguiente archivo.
+
+El hook implementa mecanismos de control como isProcessingQueue para evitar que múltiples procesos intenten cargar los mismos archivos simultáneamente, y cancela las cargas futuras cuando cancelUploadInProgressRef es true.
+
+## 4. useUploadActions
+
+Hook para gestionar las acciones del usuario relacionadas con la carga de archivos.
+
+### Descripción
+
+useUploadActions provee funciones para realizar acciones sobre los elementos de carga, como cancelar una carga, cancelar todas las cargas, eliminar un archivo cargado o reiniciar el estado de carga.
+
+### Métodos principales
+
+- cancelUpload: Cancela la carga de un archivo específico.
+- cancelAllUploads: Cancela todas las cargas activas.
+- resetUpload: Reinicia el estado de carga y cancela cargas activas.
+- deleteUpload: Elimina un archivo ya cargado del sistema mediante una mutación GraphQL.
+
+### Ejemplo de uso
+
+```jsx
+import { useUploadActions } from '@/hooks/upload';
+
+const UploadActions = ({ uploadItems, setUploadItems, ... }) => {
+  const { resetUpload, cancelUpload, cancelAllUploads, deleteUpload } = useUploadActions(
+    uploadItems,
+    setUploadItems,
+    setIsUploading,
+    getActiveUploadsRef,
+    setActiveUploadsRef,
+    getCancelAllInProgressRef,
+    setCancelUploadInProgressRef,
+    updateOverallProgress,
+    resetUploadState,
+    checkAndProcessQueue
+  );
+
+  return (
+    <div>
+      {uploadItems.map(item => (
+        <div key={item.id}>
+          <span>{item.file.name}</span>
+          <progress value={item.progress} max="100" />
+          
+          {item.status === 'uploading' && (
+            <button onClick={() => cancelUpload(item.id)}>Cancelar</button>
+          )}
+          
+          {item.status === 'completed' && (
+            <button onClick={() => deleteUpload(item.id)}>Eliminar</button>
+          )}
+        </div>
+      ))}
+      
+      {uploadItems.length > 0 && (
+        <>
+          <button onClick={cancelAllUploads}>Cancelar Todo</button>
+          <button onClick={resetUpload}>Reiniciar</button>
+        </>
+      )}
+    </div>
+  );
+};
+```
+
+### Flujo de comunicación
+
+useUploadActions interactúa con varios componentes del sistema de carga:
+
+- Recibe las referencias al estado y funciones de otros hooks (useUploadState, useUploadQueue).
+- Cuando se cancela una carga, marca el elemento en el estado y aborta cualquier solicitud XMLHttpRequest asociada.
+- Para cargas multiparte, cancela todos los XMLHttpRequest en el array multipartXhrs del elemento.
+- El método deleteUpload utiliza useMutations para ejecutar una mutación GraphQL DELETE_DOCUMENT_DMS.
+- Después de cancelar cargas, notifica a useUploadQueue mediante checkAndProcessQueue para continuar con otros archivos pendientes.
+
+useUploadActions maneja diferentes estados de cancelación: una carga en proceso requiere abortar las solicitudes HTTP, mientras que una carga pendiente simplemente se marca como 'cancelled'.
+
+## 5. useMultipartUpload
+
+Hook especializado en gestionar la carga de archivos grandes mediante la técnica de carga multiparte a S3.
+
+### Descripción
+
+useMultipartUpload implementa el proceso de carga multiparte a Amazon S3, permitiendo cargar archivos grandes dividiéndolos en partes que se cargan en paralelo. Maneja la inicialización de la carga, la creación de URLs prefirmadas, la carga de partes y la finalización del proceso.
+
+### Métodos principales
+
+- uploadMultipart: Método principal que gestiona todo el proceso de carga multiparte.
+- generateFilePath: Genera la ruta del archivo en el almacenamiento basado en la ubicación actual.
+- initializeUpload: Inicializa la carga multiparte con el servidor.
+- uploadPart: Carga una parte individual del archivo.
+- processChunk: Procesa un grupo de partes simultáneamente.
+- processChunksSequentially: Procesa todos los grupos de partes en secuencia.
+- completeUpload: Finaliza el proceso de carga multiparte.
+
+### Ejemplo de uso
+
+```jsx
+import { useMultipartUpload } from '@/hooks/upload';
+
+const MultipartUploadComponent = () => {
+  const { uploadMultipart } = useMultipartUpload();
+  const [file, setFile] = useState<File | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [status, setStatus] = useState('idle');
+  const activeUploadsRef = useRef(0);
+  const cancelRef = useRef(false);
+  
+  const handleFileChange = (event) => {
+    if (event.target.files && event.target.files[0]) {
+      setFile(event.target.files[0]);
+    }
+  };
+  
+  const handleUpload = async () => {
+    if (!file) return;
+    
+    const uploadItem = {
+      id: 'unique-id',
+      file: file,
+      progress: 0,
+      status: 'pending' as const
+    };
+    
+    setStatus('uploading');
+    
+    try {
+      await uploadMultipart(
+        uploadItem,
+        '/documents', // pathname
+        (id, progress, status) => {
+          setProgress(progress);
+          setStatus(status);
+        },
+        activeUploadsRef,
+        cancelRef,
+        () => {}
+      );
+    } catch (error) {
+      console.error('Upload failed:', error);
+      setStatus('error');
+    }
+  };
+  
+  const handleCancel = () => {
+    cancelRef.current = true;
+    setStatus('cancelling');
+  };
+  
+  return (
+    <div>
+      <input type="file" onChange={handleFileChange} />
+      <button onClick={handleUpload} disabled={!file || status === 'uploading'}>Upload</button>
+      {status === 'uploading' && (
+        <>
+          <progress value={progress} max="100" />
+          <button onClick={handleCancel}>Cancel</button>
+        </>
+      )}
+      <div>Status: {status}</div>
+    </div>
+  );
+};
+```
+
+### Flujo de comunicación
+
+useMultipartUpload se comunica principalmente con servicios externos y utiliza callbacks para informar del progreso:
+
+- Interactúa con la API del backend (endpoints como /api/start-multipart-upload, /api/generate-presigned-url y /api/complete-multipart-upload).
+- Utiliza XMLHttpRequest para cargar cada parte a Amazon S3 usando URLs prefirmadas.
+- Reporta el progreso a través de la función updateProgress proporcionada por useUploadState.
+- Consulta y modifica las referencias (activeUploadsRef, cancelUploadInProgressRef) para coordinar con otros hooks.
+- Notifica a useUploadQueue mediante checkAndProcessQueue cuando finaliza una carga.
+
+El hook está diseñado para manejar archivos grandes de manera eficiente, dividiendo el archivo en partes de 25MB y procesando múltiples partes simultáneamente para optimizar la velocidad de carga, mientras mantiene un control preciso sobre el progreso y proporciona soporte para cancelación.
+
+## Diagrama de flujo de comunicación entre hooks
+
+La interacción entre los cinco hooks sigue este flujo general:
+
+- useFileUpload es la interfaz principal para los componentes de UI.
+- useUploadState gestiona el estado central de todo el sistema.
+- useUploadQueue controla qué archivos se cargan y cuándo.
+- useMultipartUpload implementa la lógica de carga real de archivos grandes.
+- useUploadActions proporciona funciones para las acciones del usuario.
+
+Cuando el usuario inicia una carga:
+
+- 1. useFileUpload llama a handleUploadAll
+- 2. handleUploadAll activa useUploadQueue.processUploadQueue
+- 3. useUploadQueue encuentra archivos pendientes y llama a useMultipartUpload.uploadMultipart para cada uno
+- 4. useMultipartUpload inicia la carga y reporta el progreso a useUploadState.updateProgress
+- 5. useUploadState actualiza el estado y notifica a la UI
+
+Cuando se cancela o completa una carga, useMultipartUpload notifica a useUploadQueue, que puede seguir procesando más archivos de la cola. useUploadActions permite al usuario interactuar con el sistema en cualquier momento para cancelar, eliminar o reiniciar la carga.

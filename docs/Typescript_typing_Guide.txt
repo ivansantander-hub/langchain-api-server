@@ -1,0 +1,522 @@
+Typescript typing Guide
+1. Introducción
+Objetivo del Documento
+Explicar la importancia del tipado en TypeScript y establecer lineamientos
+claros sobre el uso de interface, type, any, unknown y genéricos, además de
+los tipos avanzados y enum, dentro del equipo de desarrollo en LearUp.
+
+Beneficios del Tipado
+Mejora de la seguridad del código.
+Detección temprana de errores.
+Mejor documentación y autocompletado en IDEs.
+
+2. Uso de Interfaces
+Definición de Interfaces
+Una interface se usa para definir la estructura de un objeto de manera clara y
+extensible. Se recomienda para estructuras que puedan evolucionar con el
+tiempo y ser extendidas.
+
+Sintaxis Básica
+interface User {
+id: number;
+name: string;
+email: string;
+}
+
+Extensión de Interfaces
+Permite heredar propiedades de otras interfaces, facilitando la reutilización del
+código.
+
+Typescript typing Guide
+
+1
+
+interface Person {
+id: number;
+name: string;
+}
+interface Employee extends Person {
+position: string;
+}
+
+Ejemplo Práctico
+Caso de uso: Modelado de datos de usuario en una API.
+function getUser(): User {
+return { id: 1, name: "John Doe", email: "john@company.com" };
+}
+
+3. Uso de Types
+Definición de Types
+Un type permite definir valores basados en los tipos primitivos de TypeScript:
+
+Tipos Básicos
+// Primitive Types
+type Text = string;
+// Text strings
+type Age = number;
+// Numbers (integers or decimals)
+type IsActive = boolean; // True or false values
+type CreatedAt = Date; // Dates and times
+type UniqueID = symbol; // Unique identifiers
+type AnyValue = any; // Any type (avoid using it)
+type UnknownValue = unknown; // Any type, but safer than 'any'
+type Nothing = void; // Functions with no return value
+type NeverHappens = never; // Value that never occurs
+
+Typescript typing Guide
+
+2
+
+string / number / boolean: Datos básicos como nombres, edades o
+estados.
+Date → Fechas en APIs o registros.
+symbol → Identificadores únicos en estructuras avanzadas.
+void / never → Definir funciones con retorno vacío o errores.
+any / unknown → Casos donde el tipo es incierto (se recomienda unknown
+sobre any).
+
+Tipos de Unión e Intersección
+Unión (|): Permite múltiples tipos posibles.
+Intersección (&): Combina múltiples tipos en uno solo
+
+📌
+
+//
+Union: A value can be one type or another
+type ID = string | number;
+type Status = "active" | "inactive" | "pending";
+let userId: ID = 123;
+userId = "abc123"; //
+
+✅ Correct, as it can be a string or a number
+
+let accountStatus: Status = "active";
+accountStatus = "suspended"; //
+Error: "suspended" is not a valid value
+
+📌
+
+❌
+
+//
+Intersection: Combines multiple types into one
+type User = { id: number; name: string };
+type Employee = User & { position: string; salary: number };
+const employee: Employee = {
+id: 1,
+name: "Alice",
+position: "Developer",
+salary: 50000
+};
+//
+
+❌ Error if a property is missing (e.g., position or salary)
+
+Typescript typing Guide
+
+3
+
+Tipos Literales
+Restringen un valor a un conjunto específico.
+type Role = "admin" | "user" | "guest"; // Can only be one of these values
+
+Tipos de Funciones
+Definen la firma de una función, asegurando los tipos de sus parámetros y
+respuesta.
+// Define a function type
+type MathOperation = (a: number, b: number) => number;
+// Functions that match the signature
+const sum: MathOperation = (x, y) => x + y;
+const multiply: MathOperation = (x, y) => x * y;
+
+➡️ 8
+➡️ 15
+
+console.log(sum(5, 3));
+//
+console.log(multiply(5, 3)); //
+
+4. Uso de Tipos Genéricos
+Definición de Tipos Genéricos
+Los tipos genéricos permiten crear estructuras reutilizables que trabajan con
+tipos dinámicos en lugar de un tipo fijo. Esto los hace flexibles y escalables.
+
+Sintaxis basica de Genéricos
+function identity<T>(arg: T): T {
+return arg;
+}
+
+➡️ 10 (type: number)
+console.log(identity("Hola")); // ➡️ "Hola" (type: string)
+console.log(identity(10));
+
+T
+
+//
+
+es un parámetro de tipo que representa un tipo dinámico.
+
+Typescript typing Guide
+
+4
+
+Se resuelve automáticamente según el valor pasado.
+
+Uso de genéricos en interfaces
+En interfaces también pueden usar genéricos, lo que permite definir
+estructuras reutilizables sin perder el tipado fuerte.
+interface ApiResponse<T> {
+data: T | null;
+status: number;
+error?: string;
+}
+const userResponse: ApiResponse<{ id: number; name: string }> = { // 'T' i
+n this case is an object with 'id' and 'name'
+
+✅
+
+data: { id: 1, name: "Alice" }, //
+User data retrieved successfully
+status: 200
+//
+Successful HTTP status code
+
+✅
+
+};
+
+const errorResponse: ApiResponse<null> = { // 'T' in this case is null
+
+❌ No data available
+// ❌ Status code indicating 'Not Found'
+error: "User not found" // ✅ Error message
+data: null,
+status: 404,
+
+};
+
+//
+
+Ejemplo Práctico
+Caso de uso: Creación de una función genérica para manejar respuestas de
+API.
+//
+
+📌 Generic interface for API responses
+
+interface ApiResponse<T> {
+data: T | null; // Holds the response data or null if there's an error
+status: number;
+error?: string;
+}
+//
+
+📌 Generic function to fetch data from an API
+
+async function fetchData<T>(url: string): Promise<ApiResponse<T>> {
+
+Typescript typing Guide
+
+5
+
+try {
+const response = await fetch(url);
+// Check if the response is not successful
+if (!response.ok) {
+return { data: null, status: response.status, error: response.statusTex
+t };
+}
+// Parse and return the JSON response
+const data: T = await response.json();
+return { data, status: response.status };
+} catch (error) {
+// Handle network or unexpected errors
+return { data: null, status: 500, error: (error as Error).message };
+}
+}
+
+5. Tipos Especiales: any vs unknown
+Diferencias entre any y unknown
+any: Permite cualquier tipo sin restricciones, deshabilitando la seguridad de
+tipos.
+unknown: Acepta cualquier tipo, pero requiere validación antes de su uso.
+
+Cuándo usar any
+A pesar de que unknown es generalmente más seguro, existen situaciones
+específicas donde any puede ser apropiado:
+Migraciones graduales: Cuando se migra código JavaScript a TypeScript
+de forma incremental.
+Integraciones con bibliotecas externas: Al trabajar con bibliotecas sin
+definiciones de tipos.
+Prototipos rápidos: En fases iniciales de desarrollo donde la prioridad es la
+velocidad.
+
+Typescript typing Guide
+
+6
+
+Datos con estructura impredecible: Al recibir datos cuya estructura puede
+variar significativamente.
+let data: any;
+data = "Texto";
+data = 42;
+let result: string = data; //
+es en runtime
+
+✅ Se permite sin validación, puede causar error
+
+Ejemplo con unknown (Recomendado)
+El tipo unknown debe ser la opción predeterminada cuando se necesita
+flexibilidad de tipos:
+let value: unknown;
+value = "Texto";
+value = 42;
+if (typeof value === "string") {
+let str: string = value; //
+Solo se permite tras validación
+}
+
+✅
+
+6. Tipos Avanzados
+Tipos Condicionales
+Permiten evaluar un tipo en tiempo de compilación.
+type IsString<T> = T extends string ? "Yes" : "No";
+type Result = IsString<number>; // "No"
+
+Inferencia de Tipos
+function getProperty<T, K extends keyof T>(obj: T, key: K) {
+return obj[key];
+}
+
+Typescript typing Guide
+
+7
+
+Tipos Utilitarios Comunes en TypeScript: Record Omit y
+Exclude
+Record<K, V> : Permite definir un objeto donde las claves (K) tienen un tipo
+
+específico y los valores (V) siguen una estructura determinada.
+type Users = Record<string, { id: number; name: string }>;
+const users: Users = {
+user1: { id: 1, name: "Alice" },
+user2: { id: 2, name: "Bob" }
+};
+Omit<T, K> :
+
+Elimina propiedades específicas de un tipo.
+
+type User = { id: number; name: string; email: string };
+type UserWithoutEmail = Omit<User, "email">;
+Exclude<T, U> : Elimina tipos de una unión.
+
+type Status = "active" | "inactive" | "banned";
+type ActiveStatus = Exclude<Status, "banned">;
+
+Tipos Utilitarios Mapeados
+Se usan para transformar las propiedades de un tipo existente.
+// Ejemplo con geneticos
+type ReadonlyWrapper<T> = {
+readonly [K in keyof T]: T[K];
+};
+// Ejemplo con type
+type User = {
+id: number;
+name: string;
+};
+type ReadonlyUser = ReadonlyWrapper<User>;
+// Equivalente a:
+
+Typescript typing Guide
+
+8
+
+// type ReadonlyUser = { readonly id: number; readonly name: string; }
+const user: ReadonlyUser = { id: 1, name: "Juan" };
+user.name = "Pedro"; //
+donly
+
+❌ Error: No se puede modificar una propiedad rea
+
+Readonly, Partial, Required y Pick
+Estos tipos utilitarios permiten manipular las propiedades de un objeto:
+type User = {
+id: number;
+name: string;
+email?: string;
+};
+Readonly<T> : Convierte todas las propiedades en solo lectura.
+
+type ReadonlyUser = Readonly<User>;
+Partial<T> : Hace que todas las propiedades sean opcionales.
+
+type PartialUser = Partial<User>;
+Required<T> : Hace que todas las propiedades sean requeridas.
+
+type RequiredUser = Required<User>;
+Pick<T, K> : Selecciona propiedades específicas de un tipo.
+
+type UserIdAndName = Pick<User, "id" | "name">;
+Para ampliar la informacion sobre otros utility types pueden visitar la
+documentacion oficial https://www.typescriptlang.org/docs/handbook/utilitytypes.html
+
+Typescript typing Guide
+
+9
+
+8. Uso de Enum en TypeScript
+Definición de Enum
+Un enum es un tipo especial en TypeScript que permite definir un conjunto de
+constantes con nombre.
+
+Tipos de Enum
+Enum Numérico
+Por defecto, los enums asignan valores numéricos comenzando desde 0:
+enum Direction {
+Up, // 0
+Down, // 1
+Left, // 2
+Right // 3
+}
+console.log(Direction.Up); // 0
+console.log(Direction[0]); // "Up" (reverse mapping)
+
+Enum con Valores Inicializados
+Se pueden asignar valores específicos:
+enum Direction {
+Up = 1,
+Down, // 2
+Left, // 3
+Right // 4
+}
+
+Enum de Cadenas
+enum UserRole {
+Admin = "ADMIN",
+User = "USER",
+Guest = "GUEST"
+
+Typescript typing Guide
+
+10
+
+}
+// No hay reverse mapping en enums de cadenas
+console.log(UserRole.Admin); // "ADMIN"
+
+Característica de Reverse Mapping
+Los enums numéricos generan un mapa bidireccional (nombre a valor y valor a
+nombre):
+enum Direction {
+Up = 1,
+Down,
+Left,
+Right
+}
+console.log(Direction[2]); // "Down"
+Esto aumenta el tamaño del código generado, ya que se crea un objeto más
+complejo.
+
+Enums Const
+Los const enum se eliminan completamente durante la compilación,
+reemplazando sus referencias con valores literales, lo que resulta en un código
+más eficiente:
+const enum Direction {
+Up = 1,
+Down,
+Left,
+Right
+}
+const dir = Direction.Up; // Se compila a: const dir = 1;
+
+Ejemplo Práctico
+
+Typescript typing Guide
+
+11
+
+Caso de uso: Definir roles de usuario en una aplicación.
+function getPermissions(role: UserRole) {
+if (role === UserRole.Admin) {
+return "Full access";
+}
+return "Limited access";
+}
+
+9. Enum vs Tipos literales
+Usar enum cuando:
+Se requiere una representación en tiempo de ejecución
+existe en JavaScript después de la compilación, lo que permite
+acceder a sus valores en tiempo de ejecución.
+enum
+
+Útil si necesitas valores asignados automáticamente o bidireccionales
+(clave-valor y valor-clave).
+Los valores son usados en múltiples archivos o módulos
+Si los valores deben ser reutilizables en varios lugares, los enum pueden
+ser más convenientes.
+Trabajas con valores dinámicos
+Si necesitas asignar valores personalizados, como cadenas o números
+específicos.
+
+Ejemplo de enum
+enum UserRole {
+Admin = "admin",
+User = "user",
+Guest = "guest"
+}
+function getPermissions(role: UserRole) {
+if (role === UserRole.Admin) {
+return "Acceso total";
+
+Typescript typing Guide
+
+12
+
+}
+return "Acceso limitado";
+}
+console.log(getPermissions(UserRole.Admin)); // "Acceso total"
+
+Usar type con uniones literales cuando:
+No se necesita una representación en tiempo de ejecución
+desaparece después de la compilación, mejorando el rendimiento
+y reduciendo el tamaño del código.
+type
+
+Se busca mejor compatibilidad con inferencia de tipos
+TypeScript puede inferir valores más fácilmente con uniones literales.
+Los valores no necesitan lógica asociada
+Si solo necesitas definir un conjunto de valores sin métodos
+adicionales.
+
+Ejemplo de type con uniones literales
+type UserRole = "admin" | "user" | "guest";
+function getPermissions(role: UserRole) {
+if (role === "admin") {
+return "Acceso total";
+}
+return "Acceso limitado";
+}
+console.log(getPermissions("admin")); // "Acceso total"
+
+10. Recursos Adicionales
+https://www.typescriptlang.org/docs/handbook/intro.html
+
+Typescript typing Guide
+
+13
+
+https://docs.aws.amazon.com/prescriptive-guidance/latest/best-practicescdk-typescript-iac/typescript-best-practices.html
+https://basarat.gitbook.io/typescript/type-system
+Iván Santander
+
+Typescript typing Guide
+
+14
+
+
+
+
+Guia Escrita por Ivan Santander

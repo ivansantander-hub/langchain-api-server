@@ -1,0 +1,324 @@
+# Guía de Desarrollo
+
+Esta guía está diseñada para desarrolladores que trabajan en el sistema de gestión de documentos frontend. Proporciona información sobre las convenciones, mejores prácticas y flujos de trabajo establecidos para el proyecto.
+
+## Configuración del Entorno de Desarrollo
+
+Para garantizar un entorno de desarrollo coherente, todos los desarrolladores deben seguir estas configuraciones:
+
+### Editor y Extensiones Recomendadas
+
+Recomendamos usar Visual Studio Code con las siguientes extensiones:
+
+- ESLint
+- Prettier - Code formatter
+- Tailwind CSS IntelliSense
+- TypeScript React code snippets
+
+### Configuración de VSCode
+
+Configura tu editor con estos ajustes para mantener la consistencia:
+
+````json
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true
+  },
+  "[typescript][typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
+}
+````
+
+## Convenciones de Código
+
+Seguimos un conjunto específico de convenciones de código para mantener la coherencia y calidad:
+
+### TypeScript
+
+- Usar tipado estricto para todas las variables, funciones y componentes.
+- `Evitar el uso de any. Preferir unknown` cuando sea necesario.
+- Definir interfaces para todos los props de componentes.
+- Utilizar tipos descriptivos para las funciones.
+
+### React y Componentes
+
+- Usar componentes funcionales con hooks en lugar de componentes de clase.
+- Seguir el patrón Atomic Design para la organización de componentes.
+- `Evitar efectos secundarios innecesarios. Utilizar useEffect` con precaución.
+- `Implementar memorización (useMemo, useCallback`) para componentes costosos o funciones.
+
+### Estructura de Componentes
+
+Todos los componentes deben seguir esta estructura básica:
+
+````tsx
+// Imports agrupados y ordenados
+import React from 'react';
+
+// Third-party libraries
+import classNames from 'classnames';
+
+// Components
+import Button from '@/components/atoms/Button';
+
+// Hooks and utils
+import { useFormattedDate } from '@/hooks/useFormattedDate';
+
+// Types
+interface MyComponentProps {
+  title: string;
+  date: Date;
+  onClick?: () => void;
+}
+
+// Componente con comentario docstring
+/**
+ * MyComponent - Descripción del componente
+ * 
+ * @param title - Título para mostrar
+ * @param date - Fecha para formatear y mostrar
+ * @param onClick - Función opcional para manejar clics
+ */
+export const MyComponent: React.FC<MyComponentProps> = ({ 
+  title, 
+  date, 
+  onClick 
+}) => {
+  // Hooks primero
+  const formattedDate = useFormattedDate(date);
+  
+  // Handlers y funciones
+  const handleClick = () => {
+    if (onClick) {
+      onClick();
+    }
+    // Lógica adicional
+  };
+  
+  // Renderizado con return explícito
+  return (
+    <div className="p-4 bg-white rounded shadow">
+      <h2 className="text-lg font-bold">{title}</h2>
+      <p className="text-sm text-gray-500">{formattedDate}</p>
+      <Button onClick={handleClick}>Acción</Button>
+    </div>
+  );
+};
+
+// Exportación por defecto
+export default MyComponent;
+````
+
+## Gestión de Estado
+
+Para la gestión de estado en la aplicación, utilizamos Jotai siguiendo estos principios:
+
+### Estructura de los Átomos
+
+`Organizamos los átomos de Jotai en archivos dedicados dentro del directorio src/jotai/`:
+
+````tsx
+// src/jotai/documentAtoms.ts
+import { atom } from 'jotai';
+import type { Document } from '@/types';
+
+// Estado primario: átomo base con la lista de documentos
+export const documentsAtom = atom<Document[]>([]);
+
+// Estado derivado: documentos filtrados por tipo
+export const pdfDocumentsAtom = atom((get) => {
+  const documents = get(documentsAtom);
+  return documents.filter(doc => doc.type === 'pdf');
+});
+
+// Átomo para escritura/lectura: filtro actual
+export const documentFilterAtom = atom<string>('');
+
+// Estado derivado que combina múltiples átomos
+export const filteredDocumentsAtom = atom((get) => {
+  const documents = get(documentsAtom);
+  const filter = get(documentFilterAtom);
+  
+  if (!filter) return documents;
+  
+  return documents.filter(doc => 
+    doc.name.toLowerCase().includes(filter.toLowerCase())
+  );
+});
+````
+
+### Uso de Átomos en Componentes
+
+````tsx
+// Ejemplo de uso en un componente
+import { useAtom, useAtomValue } from 'jotai';
+import { documentsAtom, filteredDocumentsAtom, documentFilterAtom } from '@/jotai/documentAtoms';
+
+const DocumentList = () => {
+  // Solo lectura para datos derivados
+  const filteredDocuments = useAtomValue(filteredDocumentsAtom);
+  
+  // Lectura y escritura para estado mutable
+  const [filter, setFilter] = useAtom(documentFilterAtom);
+  
+  return (
+    <div>
+      <input 
+        type="text" 
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        placeholder="Filtrar documentos..."
+      />
+      <ul>
+        {filteredDocuments.map(doc => (
+          <li key={doc.id}>{doc.name}</li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+````
+
+## Control de Versiones y Flujo de Trabajo Git
+
+Utilizamos Git con el siguiente flujo de trabajo:
+
+### Ramas Principales
+
+- `main`: Rama de producción. Código estable y listo para desplegar.
+- `development`: Rama de desarrollo. Integración de funcionalidades completadas.
+
+### Ramas de Funcionalidades
+
+Para nuevas funcionalidades, seguir esta convención de nombrado:
+
+- `feature/[issue-number]-descripcion-corta`
+- `bugfix/[issue-number]-descripcion-del-bug`
+- `refactor/[issue-number]-componente-refactorizado`
+
+### Proceso de Pull Request
+
+Todas las contribuciones deben pasar por un PR que cumple con estos requisitos:
+
+1. `La rama debe estar actualizada con la rama de destino (normalmente development`).
+2. Debe pasar todos los checks de CI (linting, tests, build).
+3. Requiere al menos una aprobación de un desarrollador.
+4. Incluir una descripción detallada de los cambios realizados.
+
+### Formato de Mensajes de Commit
+
+Usamos convenciones de mensajes de commit basadas en Conventional Commits:
+
+````
+<tipo>(<alcance>): <descripción>
+
+[cuerpo opcional]
+
+[pie opcional]
+````
+
+Ejemplos:
+
+- `feat(documents): add drag and drop functionality for pdf files`
+- `fix(auth): resolve session expiration issue`
+- `docs(readme): update installation instructions`
+- `refactor(components): convert Button to typescript`
+
+## Pruebas
+
+Las pruebas son una parte fundamental del proceso de desarrollo. Utilizamos Jest para las pruebas unitarias y de integración.
+
+### Estructura de las Pruebas
+
+`Las pruebas se organizan en directorios __tests__` junto a los componentes o módulos que prueban.
+
+````
+├── components/
+│   ├── Button/
+│   │   ├── index.tsx
+│   │   ├── Button.types.ts
+│   │   └── __tests__/
+│   │       └── Button.test.tsx
+````
+
+### Ejemplo de Prueba de Componente
+
+````tsx
+// Button.test.tsx
+import { render, screen, fireEvent } from '@testing-library/react';
+import Button from '../index';
+
+describe('Button Component', () => {
+  test('renders with correct text', () => {
+    render(<Button>Click me</Button>);
+    expect(screen.getByText('Click me')).toBeInTheDocument();
+  });
+
+  test('calls onClick handler when clicked', () => {
+    const handleClick = jest.fn();
+    render(<Button onClick={handleClick}>Click me</Button>);
+    
+    fireEvent.click(screen.getByText('Click me'));
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
+  test('applies disabled styles when disabled', () => {
+    render(<Button disabled>Disabled Button</Button>);
+    const button = screen.getByText('Disabled Button');
+    
+    expect(button).toHaveAttribute('disabled');
+    expect(button).toHaveClass('opacity-50');
+  });
+});
+````
+
+## Optimización y Rendimiento
+
+Para mantener la aplicación rápida y eficiente, sigue estas prácticas:
+
+### Lista de Comprobación de Rendimiento
+
+- Utilizar memorización para componentes o cálculos costosos.
+- Usar Lighthouse para evaluar rendimiento periodicamente.
+- Implementar carga diferida para componentes grandes.
+- Optimizar las imágenes con el componente Image de Next.js.
+- Implementar paginación o virtualización para listas grandes.
+
+### Ejemplo de Carga Diferida
+
+````tsx
+// Uso de importación dinámica para componentes pesados
+import dynamic from 'next/dynamic';
+
+// El componente se cargará sólo cuando sea necesario
+const PDFViewer = dynamic(
+  () => import('@/components/organisms/PDFViewer'),
+  {
+    loading: () => <p>Cargando visor de PDF...</p>,
+    ssr: false // Deshabilitar SSR si es un componente solo del lado del cliente
+  }
+);
+
+const DocumentPage = ({ documentId }) => {
+  return (
+    <div>
+      <h1>Visor de Documentos</h1>
+      {/* El componente se carga sólo cuando se renderiza */}
+      <PDFViewer documentId={documentId} />
+    </div>
+  );
+};
+````
+
+## Recursos y Documentación Adicional
+
+Para obtener más información sobre las herramientas y prácticas utilizadas en el proyecto, consulta estos recursos:
+
+- **Next.js:** https://nextjs.org/docs
+- **Jotai:** https://jotai.org/docs/introduction
+- **Material UI:** https://mui.com/material-ui/getting-started/
+- **Tailwind CSS:** https://tailwindcss.com/docs
+- **React PDF Viewer:** https://react-pdf-viewer.dev
