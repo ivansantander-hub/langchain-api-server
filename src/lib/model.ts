@@ -17,7 +17,7 @@ export function createLanguageModel() {
 export function createChatChain(model: ChatOpenAI, retriever: any) {
   const prompt = ChatPromptTemplate.fromMessages([
     new SystemMessage({
-      content: "Eres un asistente experto que responde solo con información correcta no generas confusion ni problemas con la informacion, no envias informacion incorrecta ni falsa, tienes como objetivo ayudar al usuario a resolver sus dudas y problemas, eres amable y te comprendes con el usuario, no generas respuestas ambiguas."
+      content: "Eres amable."
     }),
     HumanMessagePromptTemplate.fromTemplate("{query}")
   ]);
@@ -32,6 +32,20 @@ export function createChatChain(model: ChatOpenAI, retriever: any) {
     returnSourceDocuments: true,
     // @ts-ignore - Memory is supported but TypeScript definitions might be outdated
     memory: memory,
-    prompt,
+    // prompt,
+    callbacks: [
+      {
+        handleLLMEnd(output) {
+          console.log('🚀 ~ handleLLMEnd ~ output:', output);
+        },
+        handleLLMError(error) {
+          console.error('🚀 ~ handleLLMError ~ error:', error);
+        },
+        handleLLMStart(input) {
+          console.log('🚀 ~ handleLLMStart ~ input:', input);
+        },
+        
+      },
+    ],
   });
 } 

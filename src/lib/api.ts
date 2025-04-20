@@ -88,8 +88,6 @@ export function createApiServer(
   app.post('/api/chat', async (req, res) => {
     try {
       const { question, vectorStore } = req.body as ChatRequest;
-      console.log('🚀 ~ app.post ~ question:', question)
-      console.log('🚀 ~ app.post ~ vectorStore:', vectorStore)
       
       if (!question) {
         res.status(400).json({ error: 'Question is required' });
@@ -128,8 +126,6 @@ export function createApiServer(
       
       console.log('Searching for answer...');
       const response = await chain.call({ query: question });
-      console.log('🚀 ~ app.post ~ response:', response)
-      
       res.json({
         answer: response.text,
         sources: response.sourceDocuments ? 
@@ -139,6 +135,10 @@ export function createApiServer(
           })) : [],
         vectorStore: vectorStore || 'combined'
       });
+      if (response.text) {
+        console.log('Response: ', response.text)
+      }
+      console.log('==============================================')
     } catch (error) {
       console.error('Error processing the query in api.ts:', error);
       res.status(500).json({ error: 'Failed to process your question' });
