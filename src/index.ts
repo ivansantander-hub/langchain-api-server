@@ -7,6 +7,8 @@ import { FaissStore } from '@langchain/community/vectorstores/faiss';
 import { ChatOpenAI } from '@langchain/openai';
 import { RetrievalQAChain } from 'langchain/chains';
 import { createInterface } from 'readline';
+import { BufferMemory } from "langchain/memory";
+import { Document } from "langchain/document";
 
 // Load environment variables
 config();
@@ -39,21 +41,22 @@ async function main() {
   const splitDocs = await textSplitter.splitDocuments(docs);
   console.log(`Documents split into ${splitDocs.length} chunks.`);
   
-  // Create embeddings
+  // Create embeddings with improved configuration
   console.log('Creating embeddings with OpenAI...');
-  const embeddings = new OpenAIEmbeddings();
+  const embeddings = new OpenAIEmbeddings({
+    modelName: "text-embedding-3-small", // More efficient model
+    dimensions: 1536 // Optional: specify dimensions
+  });
   
-  // Create vector store
-  console.log('Storing vectors in FAISS...');
-  const vectorStore = await FaissStore.fromDocuments(splitDocs, embeddings);
+  // Load or create vector store
+  console.log('Setting up vector store...');
+  const vectorStore = await loadVectorStore(splitDocs, embeddings);
   
-  // Save the vector store
-  await vectorStore.save('./vectorstore');
-  console.log('Vector store saved in ./vectorstore');
-  
-  // Create a retriever
+  // Create a retriever with improved settings
   const retriever = vectorStore.asRetriever({
-    k: 5 // Retrieve top 5 most similar chunks
+    k: 5, // Retrieve top 5 most similar chunks
+    searchType: 'similarity', // Specify search type
+    filter: {} // Optional: additional filters
   });
   
   // Initialize the language model
@@ -62,9 +65,17 @@ async function main() {
     temperature: 0,
   });
   
-  // Create the chain
+  // Add conversation memory
+  const memory = new BufferMemory({
+    memoryKey: "chat_history",
+    returnMessages: true,
+  });
+  
+  // Create the chain with memory
   const chain = RetrievalQAChain.fromLLM(model, retriever, {
     returnSourceDocuments: true,
+    // @ts-ignore - Memory is supported but TypeScript definitions might be outdated
+    memory: memory,
   });
   
   // Setup readline interface for user input
@@ -101,6 +112,24 @@ async function main() {
   console.log('\nSystem ready to answer questions!');
   console.log('You can ask about the content of the documents in the docs/.');
   chat();
+}
+
+// Function to load existing vector store or create a new one
+async function loadVectorStore(
+  splitDocs: Document[], 
+  embeddings: OpenAIEmbeddings
+): Promise<FaissStore> {
+  try {
+    console.log('Trying to load existing vector store...');
+    return await FaissStore.load('./vectorstore', embeddings);
+  } catch {
+    console.log('No existing vector store found, creating a new one...');
+    // If it doesn't exist, create a new one
+    const vectorStore = await FaissStore.fromDocuments(splitDocs, embeddings);
+    await vectorStore.save('./vectorstore');
+    console.log('Vector store saved in ./vectorstore');
+    return vectorStore;
+  }
 }
 
 main().catch((error) => {

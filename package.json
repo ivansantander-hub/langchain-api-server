@@ -17,6 +17,7 @@
   "description": "LangChain document chat application",
   "dependencies": {
     "@langchain/community": "^0.3.41",
+    "@langchain/core": "^0.3.45",
     "@langchain/openai": "^0.5.6",
     "@types/node": "^22.14.1",
     "dotenv": "^16.5.0",
