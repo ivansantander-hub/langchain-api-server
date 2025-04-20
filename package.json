@@ -20,11 +20,17 @@
     "@langchain/core": "^0.3.45",
     "@langchain/openai": "^0.5.6",
     "@types/node": "^22.14.1",
+    "cors": "^2.8.5",
     "dotenv": "^16.5.0",
+    "express": "^5.1.0",
     "faiss-node": "^0.5.1",
     "langchain": "^0.3.23",
     "pickleparser": "^0.2.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.1"
   }
 }

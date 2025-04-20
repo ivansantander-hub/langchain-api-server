@@ -2,6 +2,7 @@ import { loadDocuments, splitDocuments } from './document.js';
 import { createEmbeddings, loadVectorStore, createRetriever } from './vectorstore.js';
 import { createLanguageModel, createChatChain } from './model.js';
 import { startChatInterface } from './interface.js';
+import { createApiServer } from './api.js';
 
 // Main initialization function for the chat system
 export async function initializeChat() {
@@ -25,4 +26,7 @@ export async function initializeChat() {
 }
 
 // Re-export the startChatInterface function for convenience
-export { startChatInterface }; 
+export { startChatInterface };
+
+// Re-export the createApiServer function for API mode
+export { createApiServer }; 

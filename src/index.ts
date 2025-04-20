@@ -1,5 +1,5 @@
 import { config } from 'dotenv';
-import { initializeChat, startChatInterface } from './lib/chat.js';
+import { initializeChat, createApiServer } from './lib/chat.js';
 
 // Load environment variables
 config();
@@ -15,8 +15,9 @@ async function main() {
     // Initialize chat system
     const { chain } = await initializeChat();
     
-    // Start chat interface
-    startChatInterface(chain);
+    // Initialize and start API server
+    const apiServer = createApiServer(chain);
+    await apiServer.startServer();
   } catch (error) {
     console.error('Error in the application:', error);
   }
