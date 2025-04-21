@@ -13,6 +13,8 @@ interface AddDocumentRequest {
 interface ChatRequest {
   question: string;
   vectorStore?: string;
+  userId?: string;
+  chatId?: string;
 }
 
 // Create Express app with support for multiple vector stores
@@ -35,7 +37,11 @@ export function createApiServer(
       endpoints: {
         '/api/chat': 'POST - Send a question to get an answer from the documents',
         '/api/vector-stores': 'GET - List all available vector stores',
-        '/api/add-document': 'POST - Upload and add a document to vector stores'
+        '/api/add-document': 'POST - Upload and add a document to vector stores',
+        '/api/users': 'GET - List all users with chat history',
+        '/api/users/:userId/vector-stores': 'GET - List all vector stores with chat history for a user',
+        '/api/users/:userId/vector-stores/:vectorName/chats': 'GET - List all chats for a specific user and vector store',
+        '/api/users/:userId/vector-stores/:vectorName/chats/:chatId': 'DELETE - Clear chat history for a specific context'
       }
     });
   });
@@ -83,10 +89,10 @@ export function createApiServer(
     }
   });
 
-  // Chat endpoint with optional vector store selection
+  // Chat endpoint with vector store selection and user/chat context
   app.post('/api/chat', async (req: any, res: any) => {
     try {
-      const { question, vectorStore } = req.body as ChatRequest;
+      const { question, vectorStore, userId, chatId } = req.body as ChatRequest;
       
       if (!question) {
         res.status(400).json({ error: 'Question is required' });
@@ -101,13 +107,22 @@ export function createApiServer(
         });
       }
 
-      console.log(`Received question: ${question}`);
-      
-      // Process the message using our chat manager
+      // Use default user and chat IDs if not provided
+      const userIdToUse = userId || 'default';
+      const chatIdToUse = chatId || 'default';
       const selectedStore = vectorStore || 'combined';
+
+      console.log(`Received question from User ${userIdToUse}, Chat ${chatIdToUse}, Store ${selectedStore}: ${question}`);
+      
+      // Process the message using our chat manager with context
       console.log(`Using vector store: ${selectedStore}`);
       
-      const response = await chatManager.processMessage(question, selectedStore);
+      const response = await chatManager.processMessage(
+        question, 
+        userIdToUse, 
+        chatIdToUse, 
+        selectedStore
+      );
       
       res.json({
         answer: response.text,
@@ -116,10 +131,12 @@ export function createApiServer(
             content: doc.pageContent,
             metadata: doc.metadata
           })) : [],
-        vectorStore: selectedStore
+        vectorStore: selectedStore,
+        userId: userIdToUse,
+        chatId: chatIdToUse
       });
       
-      console.log('Response: ', response.text);
+      console.log(`Response to User ${userIdToUse}, Chat ${chatIdToUse}, Store ${selectedStore}: ${response.text}`);
       console.log('==============================================');
     } catch (error) {
       console.error('Error processing the query in api.ts:', error);
@@ -130,6 +147,38 @@ export function createApiServer(
     }
   });
 
+  // Endpoint to list all users
+  app.get('/api/users', (req, res) => {
+    const users = chatManager.getUsers();
+    res.json({ users });
+  });
+
+  // Endpoint to list all vector stores for a user
+  app.get('/api/users/:userId/vector-stores', (req, res) => {
+    const { userId } = req.params;
+    const vectorStores = chatManager.getUserVectorStores(userId);
+    res.json({ userId, vectorStores });
+  });
+
+  // Endpoint to list all chats for a user and vector store
+  app.get('/api/users/:userId/vector-stores/:vectorName/chats', (req, res) => {
+    const { userId, vectorName } = req.params;
+    const chats = chatManager.getUserVectorChats(userId, vectorName);
+    res.json({ userId, vectorName, chats });
+  });
+
+  // Endpoint to clear chat history
+  app.delete('/api/users/:userId/vector-stores/:vectorName/chats/:chatId', (req, res) => {
+    const { userId, vectorName, chatId } = req.params;
+    chatManager.clearChatHistory(userId, vectorName, chatId);
+    res.json({ 
+      message: 'Chat history cleared successfully',
+      userId,
+      vectorName,
+      chatId
+    });
+  });
+
   // Function to start the server
   const startServer = () => {
     return new Promise<void>((resolve) => {
@@ -137,6 +186,8 @@ export function createApiServer(
         console.log(`\nAPI server running at http://localhost:${PORT}`);
         console.log('You can send questions to /api/chat endpoint');
         console.log('To specify a vector store, include "vectorStore" in your request');
+        console.log('To maintain separate chat contexts, include "userId" and "chatId" in your request');
+        console.log('Each combination of userId, vectorStore, and chatId maintains a separate chat history');
         console.log('You can add documents using the /api/add-document endpoint');
         resolve();
       });

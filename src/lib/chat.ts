@@ -4,6 +4,7 @@ import { createLanguageModel, createChatChain, formatChatHistory } from './model
 import { startChatInterface } from './interface.js';
 import { createApiServer } from './api.js';
 import { HumanMessage, AIMessage } from '@langchain/core/messages';
+import { ChatHistoryManager } from './chatHistory.js';
 
 // Main initialization function for the chat system with multiple vector stores
 export async function initializeChat() {
@@ -12,6 +13,9 @@ export async function initializeChat() {
   // Create embeddings and vector store manager
   const embeddings = createEmbeddings();
   const vectorStoreManager = new VectorStoreManager(embeddings);
+  
+  // Create chat history manager
+  const chatHistoryManager = new ChatHistoryManager();
   
   // Check if combined store exists first before loading all documents
   let combinedStoreExists = vectorStoreManager.storeExists('combined');
@@ -79,16 +83,15 @@ export async function initializeChat() {
   const model = createLanguageModel();
   const defaultChain = createChatChain(model, defaultRetriever);
   
-  // Create chat history manager
-  const chatHistory: [string, string][] = [];
-  
   // Create a manager function to handle chat state
   const chatManager = {
     chain: defaultChain,
     model,
     vectorStoreManager,
-    chatHistory,
-    async processMessage(message: string, storeName: string = 'combined') {
+    chatHistoryManager,
+    
+    // Process a message in a specific context
+    async processMessage(message: string, userId: string = 'default', chatId: string = 'default', storeName: string = 'combined') {
       try {
         // Get appropriate retriever if specified
         let chain = this.chain;
@@ -97,8 +100,11 @@ export async function initializeChat() {
           chain = createChatChain(this.model, retriever);
         }
         
-        // Process the message with chat history
-        const formattedHistory = formatChatHistory(this.chatHistory);
+        // Get chat history for this user, vector store, and chat
+        const history = this.chatHistoryManager.getChatHistory(userId, storeName, chatId);
+        
+        // Process the message with appropriate chat history
+        const formattedHistory = formatChatHistory(history);
         const response = await chain.invoke({
           input: message,
           chat_history: formattedHistory,
@@ -110,7 +116,7 @@ export async function initializeChat() {
           : JSON.stringify(response.content);
         
         // Update chat history
-        this.chatHistory.push([message, responseText]);
+        this.chatHistoryManager.addExchange(userId, storeName, chatId, message, responseText);
         
         // Return the response in expected format
         return {
@@ -124,6 +130,26 @@ export async function initializeChat() {
           sourceDocuments: [],
         };
       }
+    },
+    
+    // Get all vector stores for a user
+    getUserVectorStores(userId: string): string[] {
+      return this.chatHistoryManager.getUserVectorStores(userId);
+    },
+    
+    // Get all chats for a user and vector store
+    getUserVectorChats(userId: string, vectorName: string): string[] {
+      return this.chatHistoryManager.getUserVectorChats(userId, vectorName);
+    },
+    
+    // Get all users
+    getUsers(): string[] {
+      return this.chatHistoryManager.getUserIds();
+    },
+    
+    // Clear chat history for a user, vector store, and chat
+    clearChatHistory(userId: string, vectorName: string, chatId: string): void {
+      this.chatHistoryManager.clearChatHistory(userId, vectorName, chatId);
     }
   };
   
