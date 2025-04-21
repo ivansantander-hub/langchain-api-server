@@ -41,7 +41,8 @@ export function createApiServer(
         '/api/users': 'GET - List all users with chat history',
         '/api/users/:userId/vector-stores': 'GET - List all vector stores with chat history for a user',
         '/api/users/:userId/vector-stores/:vectorName/chats': 'GET - List all chats for a specific user and vector store',
-        '/api/users/:userId/vector-stores/:vectorName/chats/:chatId': 'DELETE - Clear chat history for a specific context'
+        '/api/users/:userId/vector-stores/:vectorName/chats/:chatId': 'DELETE - Clear chat history for a specific context',
+        '/api/users/:userId/vector-stores/:vectorName/chats/:chatId/messages': 'GET - Get complete chat history messages for a specific context'
       }
     });
   });
@@ -176,6 +177,24 @@ export function createApiServer(
       userId,
       vectorName,
       chatId
+    });
+  });
+
+  // Endpoint to get complete chat history messages
+  app.get('/api/users/:userId/vector-stores/:vectorName/chats/:chatId/messages', (req, res) => {
+    const { userId, vectorName, chatId } = req.params;
+    const chatHistory = chatManager.chatHistoryManager.getChatHistory(userId, vectorName, chatId);
+    
+    res.json({
+      userId,
+      vectorName,
+      chatId,
+      messages: chatHistory.map((exchange: [string, string], index: number) => ({
+        id: index,
+        question: exchange[0],
+        answer: exchange[1],
+        timestamp: new Date().toISOString() // Note: actual timestamps are not stored in the current implementation
+      }))
     });
   });
 
