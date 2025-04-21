@@ -13,14 +13,18 @@ if (!process.env.OPENAI_API_KEY) {
 async function main() {
   try {
     // Initialize chat system with multiple vector stores
-    const { chain, model, vectorStoreManager } = await initializeChat();
+    const chatManager = await initializeChat();
     
     // Initialize and start API server with vector store manager
-    const apiServer = createApiServer(chain, model, vectorStoreManager);
+    const apiServer = createApiServer(
+      chatManager, 
+      chatManager.model, 
+      chatManager.vectorStoreManager
+    );
     await apiServer.startServer();
     
     // Log available vector stores
-    const stores = vectorStoreManager.getAvailableStores();
+    const stores = chatManager.vectorStoreManager.getAvailableStores();
     console.log('\nAvailable vector stores:');
     stores.forEach(store => console.log(` - ${store}`));
     console.log('\nSend requests with {"question": "your question", "vectorStore": "store_name"}');

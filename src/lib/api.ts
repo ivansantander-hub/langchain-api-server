@@ -1,6 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import { RetrievalQAChain } from 'langchain/chains';
 import { ChatOpenAI } from '@langchain/openai';
 import { VectorStoreManager } from './vectorstore.js';
 import { createChatChain } from './model.js';
@@ -18,7 +17,7 @@ interface ChatRequest {
 
 // Create Express app with support for multiple vector stores
 export function createApiServer(
-  defaultChain: RetrievalQAChain, 
+  chatManager: any,
   model: ChatOpenAI,
   vectorStoreManager: VectorStoreManager
 ) {
@@ -85,7 +84,7 @@ export function createApiServer(
   });
 
   // Chat endpoint with optional vector store selection
-  app.post('/api/chat', async (req, res) => {
+  app.post('/api/chat', async (req: any, res: any) => {
     try {
       const { question, vectorStore } = req.body as ChatRequest;
       
@@ -94,38 +93,22 @@ export function createApiServer(
         return;
       }
 
+      // Validate if provided vectorStore exists
+      if (vectorStore && !vectorStoreManager.storeExists(vectorStore)) {
+        return res.status(404).json({ 
+          error: `Vector store "${vectorStore}" not found`,
+          available: vectorStoreManager.getAvailableStores()
+        });
+      }
+
       console.log(`Received question: ${question}`);
       
-      let chain = defaultChain;
+      // Process the message using our chat manager
+      const selectedStore = vectorStore || 'combined';
+      console.log(`Using vector store: ${selectedStore}`);
       
-      // Use specified vector store if provided
-      if (vectorStore && vectorStore !== 'combined') {
-        console.log(`Using vector store: ${vectorStore}`);
-        
-        // Check if the requested store exists
-        if (!vectorStoreManager.storeExists(vectorStore)) {
-          res.status(404).json({ 
-            error: `Vector store "${vectorStore}" not found`,
-            available: vectorStoreManager.getAvailableStores()
-          });
-          return;
-        }
-        
-        // Create a new chain with the specified vector store
-        try {
-          const specificRetriever = vectorStoreManager.getRetriever(vectorStore);
-          chain = createChatChain(model, specificRetriever);
-        } catch (error) {
-          console.error(`Error creating chain for ${vectorStore}:`, error);
-          res.status(500).json({ error: `Failed to use vector store "${vectorStore}"` });
-          return;
-        }
-      } else {
-        console.log('Using default combined vector store');
-      }
+      const response = await chatManager.processMessage(question, selectedStore);
       
-      console.log('Searching for answer...');
-      const response = await chain.call({ query: question });
       res.json({
         answer: response.text,
         sources: response.sourceDocuments ? 
@@ -133,15 +116,17 @@ export function createApiServer(
             content: doc.pageContent,
             metadata: doc.metadata
           })) : [],
-        vectorStore: vectorStore || 'combined'
+        vectorStore: selectedStore
       });
-      if (response.text) {
-        console.log('Response: ', response.text)
-      }
-      console.log('==============================================')
+      
+      console.log('Response: ', response.text);
+      console.log('==============================================');
     } catch (error) {
       console.error('Error processing the query in api.ts:', error);
-      res.status(500).json({ error: 'Failed to process your question' });
+      res.status(500).json({ 
+        error: 'Failed to process your question',
+        message: error instanceof Error ? error.message : 'Unknown error' 
+      });
     }
   });
 

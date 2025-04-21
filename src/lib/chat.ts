@@ -1,8 +1,9 @@
 import { loadDocuments, splitDocuments, loadSingleDocument, listAvailableDocuments } from './document.js';
 import { createEmbeddings, VectorStoreManager } from './vectorstore.js';
-import { createLanguageModel, createChatChain } from './model.js';
+import { createLanguageModel, createChatChain, formatChatHistory } from './model.js';
 import { startChatInterface } from './interface.js';
 import { createApiServer } from './api.js';
+import { HumanMessage, AIMessage } from '@langchain/core/messages';
 
 // Main initialization function for the chat system with multiple vector stores
 export async function initializeChat() {
@@ -78,17 +79,61 @@ export async function initializeChat() {
   const model = createLanguageModel();
   const defaultChain = createChatChain(model, defaultRetriever);
   
-  return { 
+  // Create chat history manager
+  const chatHistory: [string, string][] = [];
+  
+  // Create a manager function to handle chat state
+  const chatManager = {
     chain: defaultChain,
     model,
-    vectorStoreManager
+    vectorStoreManager,
+    chatHistory,
+    async processMessage(message: string, storeName: string = 'combined') {
+      try {
+        // Get appropriate retriever if specified
+        let chain = this.chain;
+        if (storeName !== 'combined') {
+          const retriever = this.vectorStoreManager.getRetriever(storeName);
+          chain = createChatChain(this.model, retriever);
+        }
+        
+        // Process the message with chat history
+        const formattedHistory = formatChatHistory(this.chatHistory);
+        const response = await chain.invoke({
+          input: message,
+          chat_history: formattedHistory,
+        });
+        
+        // Convert response to string if needed
+        const responseText = typeof response.content === 'string' 
+          ? response.content 
+          : JSON.stringify(response.content);
+        
+        // Update chat history
+        this.chatHistory.push([message, responseText]);
+        
+        // Return the response in expected format
+        return {
+          text: responseText,
+          sourceDocuments: [], // No source documents in the new implementation
+        };
+      } catch (error) {
+        console.error("Error in processMessage:", error);
+        return {
+          text: "Lo siento, ocurrió un error al procesar tu pregunta. Por favor intenta de nuevo.",
+          sourceDocuments: [],
+        };
+      }
+    }
   };
+  
+  return chatManager;
 }
 
 // Initialize CLI chat interface with vector store selection
 export async function startCLI() {
-  const { chain, model, vectorStoreManager } = await initializeChat();
-  startChatInterface(chain, model, vectorStoreManager);
+  const chatManager = await initializeChat();
+  startChatInterface(chatManager.chain, chatManager.model, chatManager.vectorStoreManager, chatManager);
 }
 
 // Re-export the interfaces

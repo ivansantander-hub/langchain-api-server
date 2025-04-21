@@ -1,99 +1,89 @@
-import { createInterface } from 'readline';
-import { RetrievalQAChain } from 'langchain/chains';
+import * as readline from 'readline';
 import { ChatOpenAI } from '@langchain/openai';
 import { VectorStoreManager } from './vectorstore.js';
 import { createChatChain } from './model.js';
 
-// Setup chat interface with vector store selection
+// Chat interface with vector store selection
 export function startChatInterface(
-  defaultChain: RetrievalQAChain, 
-  model: ChatOpenAI,
-  vectorStoreManager: VectorStoreManager
+  defaultChain: any, 
+  model: ChatOpenAI, 
+  vectorStoreManager: VectorStoreManager,
+  chatManager: any
 ) {
-  // Setup readline interface for user input
-  const rl = createInterface({
+  const rl = readline.createInterface({
     input: process.stdin,
-    output: process.stdout,
+    output: process.stdout
   });
   
-  // Get available vector stores
-  const vectorStores = vectorStoreManager.getAvailableStores();
-  
-  console.log('\nSystem ready to answer questions!');
-  console.log('You can ask about the content of the documents in the docs/.');
+  // Display available vector stores
+  const stores = vectorStoreManager.getAvailableStores();
   console.log('\nAvailable vector stores:');
-  vectorStores.forEach(store => console.log(` - ${store}`));
-  console.log('\nTo select a specific vector store, type "@store_name" before your question.');
-  console.log('Example: "@document1 What does this document say about X?"');
-  console.log('If no store is specified, the combined store with all documents will be used.');
+  stores.forEach(store => console.log(` - ${store}`));
+  console.log('\nYou can select a vector store by typing "use <store_name>"');
+  console.log('Type "exit" to quit the chat.\n');
   
-  // Current chain to use
-  let currentChain = defaultChain;
+  // Current vector store
   let currentStore = 'combined';
   
-  // Function to handle chat interaction
-  const chat = () => {
-    rl.question('\nWhat would you like to ask about the documents? (Type "exit" to quit)\n> ', async (input) => {
+  const promptUser = () => {
+    rl.question('\nYou: ', async (input) => {
+      // Check for commands
       if (input.toLowerCase() === 'exit') {
         console.log('Goodbye!');
         rl.close();
         return;
       }
       
-      let question = input;
-      let vectorStore = currentStore;
-      
-      // Check if user specified a vector store
-      if (input.startsWith('@')) {
-        const parts = input.split(' ');
-        const storeSelector = parts[0].substring(1); // Remove @ symbol
-        
-        if (vectorStoreManager.storeExists(storeSelector)) {
-          vectorStore = storeSelector;
-          question = parts.slice(1).join(' ');
-          console.log(`Using vector store: ${vectorStore}`);
-          
-          // Create a new chain with the specified vector store
-          try {
-            const specificRetriever = vectorStoreManager.getRetriever(vectorStore);
-            currentChain = createChatChain(model, specificRetriever);
-            currentStore = vectorStore;
-          } catch (error) {
-            console.error(`Error creating chain for ${vectorStore}:`, error);
-            console.log('Falling back to default combined store.');
-            vectorStore = 'combined';
-            currentChain = defaultChain;
-            currentStore = 'combined';
-          }
+      // Command to change vector store
+      if (input.toLowerCase().startsWith('use ')) {
+        const storeName = input.substring(4).trim();
+        if (vectorStoreManager.storeExists(storeName)) {
+          currentStore = storeName;
+          console.log(`Now using vector store: ${currentStore}`);
         } else {
-          console.log(`Vector store "${storeSelector}" not found, using ${currentStore}.`);
-          
-          // Keep @ symbol as part of the question if store doesn't exist
-          question = input;
+          console.log(`Vector store "${storeName}" not found. Available stores:`);
+          vectorStoreManager.getAvailableStores().forEach(store => console.log(` - ${store}`));
         }
-      }
-      
-      if (!question.trim()) {
-        console.log('Please enter a question.');
-        chat();
+        promptUser();
         return;
       }
       
-      try {
-        console.log('Searching for answer...');
-        const response = await currentChain._call({ query: question });
-        
-        console.log('\n--- Response ---');
-        console.log(response.text);
-        console.log(`\nUsing vector store: ${currentStore}`);
-        
-        chat();
-      } catch (error) {
-        console.error('Error processing the query: in interface.ts', error);
-        chat();
+      // Command to list available stores
+      if (input.toLowerCase() === 'list stores') {
+        console.log('Available vector stores:');
+        vectorStoreManager.getAvailableStores().forEach(store => console.log(` - ${store}`));
+        promptUser();
+        return;
       }
+      
+      // Process message with the chat manager
+      try {
+        console.log(`\nUsing vector store: ${currentStore}`);
+        console.log(`Thinking...`);
+        
+        const response = await chatManager.processMessage(input, currentStore);
+        
+        console.log(`\nAI: ${response.text}`);
+        
+        // Display source documents if available
+        if (response.sourceDocuments && response.sourceDocuments.length > 0) {
+          console.log('\nSources:');
+          response.sourceDocuments.slice(0, 3).forEach((doc: any, i: number) => {
+            console.log(`\nSource ${i + 1}:`);
+            console.log(`${doc.pageContent.substring(0, 150)}...`);
+            if (doc.metadata && doc.metadata.source) {
+              console.log(`Source: ${doc.metadata.source}`);
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error processing your question:', error);
+      }
+      
+      promptUser();
     });
   };
   
-  chat();
+  console.log('Welcome to the Document Chat CLI! Ask a question about your documents.');
+  promptUser();
 } 
