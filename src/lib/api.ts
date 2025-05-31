@@ -1,9 +1,15 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { ChatOpenAI } from '@langchain/openai';
 import { VectorStoreManager } from './vectorstore.js';
 import { createChatChain } from './model.js';
 import { saveUploadedDocument, loadSingleDocument, splitDocuments } from './document.js';
+
+// Get __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 interface AddDocumentRequest {
   filename: string;
@@ -30,8 +36,20 @@ export function createApiServer(
   app.use(cors());
   app.use(express.json({ limit: '10mb' }));
 
-  // Home route
+  // Serve static files from the root directory
+  const publicPath = path.join(__dirname, '../..');
+  app.use(express.static(publicPath));
+
+  // API Routes prefix
+  app.use('/api', express.Router());
+
+  // Home route - serve the web client
   app.get('/', (req, res) => {
+    res.sendFile(path.join(publicPath, 'index.html'));
+  });
+
+  // API Info route
+  app.get('/api', (req, res) => {
     res.json({ 
       message: 'LangChain Document Chat API', 
       endpoints: {

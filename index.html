@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LangChain Document Chat - Cliente Web</title>
+    
+    <!-- Estilos -->
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- Font Awesome para iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- React y ReactDOM desde CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel para JSX en el navegador -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Estilos adicionales para el error container -->
+    <style>
+        .error-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            background: var(--bg-color);
+        }
+
+        .error-content {
+            text-align: center;
+            max-width: 600px;
+            padding: 2rem;
+            background: var(--surface-color);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+        }
+
+        .error-content i {
+            font-size: 3rem;
+            color: var(--error-color);
+            margin-bottom: 1rem;
+        }
+
+        .error-content h2 {
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        .error-content p {
+            margin-bottom: 1.5rem;
+            color: var(--text-muted);
+        }
+
+        .error-actions {
+            margin-bottom: 2rem;
+        }
+
+        .retry-button {
+            padding: 0.75rem 1.5rem;
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-weight: 500;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .retry-button:hover:not(:disabled) {
+            background: #0056b3;
+            transform: translateY(-1px);
+        }
+
+        .retry-button:disabled {
+            background: var(--text-muted);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .connection-help {
+            text-align: left;
+            background: var(--bg-color);
+            padding: 1.5rem;
+            border-radius: var(--border-radius);
+            border-left: 4px solid var(--accent-color);
+        }
+
+        .connection-help h3 {
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        .connection-help ol {
+            margin-left: 1.5rem;
+        }
+
+        .connection-help li {
+            margin-bottom: 0.5rem;
+            color: var(--text-muted);
+        }
+
+        .connection-help code {
+            background: var(--surface-color);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-family: monospace;
+            color: var(--accent-color);
+            border: 1px solid var(--border-color);
+        }
+
+        /* Estilos adicionales para la interfaz */
+        .chat-header {
+            padding: 1rem;
+            background: var(--surface-color);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-title h2 {
+            margin: 0;
+            font-size: 1.25rem;
+            color: var(--text-color);
+        }
+
+        .chat-subtitle {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        .chat-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .action-button {
+            padding: 0.5rem;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            transition: var(--transition);
+            color: var(--text-color);
+        }
+
+        .action-button:hover:not(:disabled) {
+            background: var(--surface-color);
+            border-color: var(--accent-color);
+        }
+
+        .action-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .welcome-message {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding: 2rem;
+        }
+
+        .welcome-content {
+            text-align: center;
+            max-width: 500px;
+            padding: 2rem;
+            background: var(--surface-color);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+        }
+
+        .welcome-content i {
+            font-size: 3rem;
+            color: var(--accent-color);
+            margin-bottom: 1rem;
+        }
+
+        .welcome-content h3 {
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        .welcome-content p {
+            margin-bottom: 0.5rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .app-status {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            font-size: 0.9rem;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            color: white;
+            opacity: 0.9;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .connection-status.connected {
+            color: var(--success-color);
+        }
+
+        .connection-status.disconnected {
+            color: var(--error-color);
+        }
+
+        .connection-status.connecting {
+            color: var(--warning-color);
+        }
+
+        /* Estilos para el upload de archivos */
+        .file-input-content {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            pointer-events: none;
+        }
+
+        .file-input-content i {
+            font-size: 1.5rem;
+            color: var(--accent-color);
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .clear-button {
+            padding: 0.75rem;
+            background: var(--text-muted);
+            color: white;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-weight: 500;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .clear-button:hover:not(:disabled) {
+            background: #6c757d;
+        }
+
+        .upload-help {
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background: rgba(0, 123, 255, 0.05);
+            border: 1px solid rgba(0, 123, 255, 0.1);
+            border-radius: var(--border-radius);
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        /* Estilos para las estadísticas */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 1rem;
+            background: var(--bg-color);
+            border-radius: var(--border-radius);
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        .stats-footer {
+            text-align: center;
+            padding-top: 0.5rem;
+            border-top: 1px solid var(--border-color);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <!-- Scripts de la aplicación -->
+    <script src="api.js"></script>
+    <script src="components/ChatMessage.js" type="text/babel"></script>
+    <script src="components/VectorStoreSelector.js" type="text/babel"></script>
+    <script src="components/DocumentManager.js" type="text/babel"></script>
+    <script src="components/ChatInterface.js" type="text/babel"></script>
+    <script src="app.js" type="text/babel"></script>
+</body>
+</html> 
