@@ -75,17 +75,54 @@ class APIClient {
 
     // Obtener lista de usuarios
     async getUsers() {
-        return this.request('/api/users');
+        try {
+            const response = await this.request('/api/users');
+            return response;
+        } catch (error) {
+            console.error('Error getting users:', error);
+            // Si no se pueden obtener usuarios, retornar estructura vacía
+            return { users: [] };
+        }
+    }
+
+    // Crear usuario (mediante envío de mensaje inicial)
+    async createUser(userId) {
+        try {
+            // Crear usuario enviando un mensaje inicial
+            const response = await this.sendMessage('Hola, soy un nuevo usuario', {
+                vectorStore: 'combined',
+                userId: userId,
+                chatId: 'default'
+            });
+            return response;
+        } catch (error) {
+            console.error('Error creating user:', error);
+            throw new Error(`No se pudo crear el usuario: ${error.message}`);
+        }
     }
 
     // Obtener vector stores de un usuario
     async getUserVectorStores(userId) {
-        return this.request(`/api/users/${userId}/vector-stores`);
+        try {
+            const response = await this.request(`/api/users/${userId}/vector-stores`);
+            return response;
+        } catch (error) {
+            console.error(`Error getting vector stores for user ${userId}:`, error);
+            // Si no se pueden obtener, retornar estructura vacía
+            return { vectorStores: [] };
+        }
     }
 
     // Obtener chats de un usuario y vector store
     async getUserChats(userId, vectorName) {
-        return this.request(`/api/users/${userId}/vector-stores/${vectorName}/chats`);
+        try {
+            const response = await this.request(`/api/users/${userId}/vector-stores/${vectorName}/chats`);
+            return response;
+        } catch (error) {
+            console.error(`Error getting chats for user ${userId} and vector ${vectorName}:`, error);
+            // Si no se pueden obtener, retornar estructura vacía
+            return { chats: [] };
+        }
     }
 
     // Obtener chats de un usuario y vector store (alias para compatibilidad)
@@ -95,19 +132,32 @@ class APIClient {
 
     // Obtener mensajes de un chat específico
     async getChatMessages(userId, vectorName, chatId) {
-        return this.request(`/api/users/${userId}/vector-stores/${vectorName}/chats/${chatId}/messages`);
+        try {
+            const response = await this.request(`/api/users/${userId}/vector-stores/${vectorName}/chats/${chatId}/messages`);
+            return response;
+        } catch (error) {
+            console.error(`Error getting messages for chat ${chatId}:`, error);
+            // Si no se pueden obtener, retornar estructura vacía
+            return { messages: [] };
+        }
     }
 
     // Obtener historial de mensajes
     async getChatHistory(userId, vectorName, chatId) {
-        return this.request(`/api/users/${userId}/vector-stores/${vectorName}/chats/${chatId}/messages`);
+        return this.getChatMessages(userId, vectorName, chatId);
     }
 
     // Limpiar historial de chat
     async clearChatHistory(userId, vectorName, chatId) {
-        return this.request(`/api/users/${userId}/vector-stores/${vectorName}/chats/${chatId}`, {
-            method: 'DELETE'
-        });
+        try {
+            const response = await this.request(`/api/users/${userId}/vector-stores/${vectorName}/chats/${chatId}`, {
+                method: 'DELETE'
+            });
+            return response;
+        } catch (error) {
+            console.error(`Error clearing chat history for ${chatId}:`, error);
+            throw new Error(`No se pudo eliminar el historial del chat: ${error.message}`);
+        }
     }
 
     // Verificar conexión con el servidor

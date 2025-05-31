@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test API - LangChain Document Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .test-result {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+            font-family: monospace;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .success {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+        .error {
+            border-color: #dc3545;
+            background: #f8d7da;
+        }
+        input {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test API - LangChain Document Chat</h1>
+    
+    <div class="test-section">
+        <h2>1. Conexión con el servidor</h2>
+        <button class="test-button" onclick="testConnection()">Probar Conexión</button>
+        <div id="connection-result" class="test-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Obtener lista de usuarios</h2>
+        <button class="test-button" onclick="testGetUsers()">Obtener Usuarios</button>
+        <div id="users-result" class="test-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Crear nuevo usuario</h2>
+        <input type="text" id="newUserName" placeholder="Nombre del usuario" value="test-user">
+        <button class="test-button" onclick="testCreateUser()">Crear Usuario</button>
+        <div id="create-user-result" class="test-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Obtener vector stores de usuario</h2>
+        <input type="text" id="userForVectorStores" placeholder="ID del usuario" value="test-user">
+        <button class="test-button" onclick="testGetUserVectorStores()">Obtener Vector Stores</button>
+        <div id="vector-stores-result" class="test-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>5. Obtener chats de usuario</h2>
+        <input type="text" id="userForChats" placeholder="ID del usuario" value="test-user">
+        <input type="text" id="vectorStoreForChats" placeholder="Vector store" value="combined">
+        <button class="test-button" onclick="testGetUserChats()">Obtener Chats</button>
+        <div id="chats-result" class="test-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>6. Enviar mensaje</h2>
+        <input type="text" id="messageUser" placeholder="ID del usuario" value="test-user">
+        <input type="text" id="messageText" placeholder="Mensaje" value="Hola, ¿cómo estás?">
+        <button class="test-button" onclick="testSendMessage()">Enviar Mensaje</button>
+        <div id="message-result" class="test-result"></div>
+    </div>
+
+    <script src="api.js"></script>
+    <script>
+        function updateResult(elementId, content, isError = false) {
+            const element = document.getElementById(elementId);
+            element.textContent = content;
+            element.className = `test-result ${isError ? 'error' : 'success'}`;
+        }
+
+        async function testConnection() {
+            try {
+                updateResult('connection-result', 'Probando conexión...');
+                const connected = await window.apiClient.checkConnection();
+                updateResult('connection-result', `Conexión: ${connected ? 'ÉXITO' : 'FALLIDA'}`);
+            } catch (error) {
+                updateResult('connection-result', `Error: ${error.message}`, true);
+            }
+        }
+
+        async function testGetUsers() {
+            try {
+                updateResult('users-result', 'Obteniendo usuarios...');
+                const response = await window.apiClient.getUsers();
+                updateResult('users-result', `Usuarios:\n${JSON.stringify(response, null, 2)}`);
+            } catch (error) {
+                updateResult('users-result', `Error: ${error.message}`, true);
+            }
+        }
+
+        async function testCreateUser() {
+            try {
+                const userName = document.getElementById('newUserName').value;
+                if (!userName.trim()) {
+                    updateResult('create-user-result', 'Error: Ingresa un nombre de usuario', true);
+                    return;
+                }
+                
+                updateResult('create-user-result', 'Creando usuario...');
+                const response = await window.apiClient.createUser(userName.trim());
+                updateResult('create-user-result', `Usuario creado:\n${JSON.stringify(response, null, 2)}`);
+            } catch (error) {
+                updateResult('create-user-result', `Error: ${error.message}`, true);
+            }
+        }
+
+        async function testGetUserVectorStores() {
+            try {
+                const userId = document.getElementById('userForVectorStores').value;
+                if (!userId.trim()) {
+                    updateResult('vector-stores-result', 'Error: Ingresa un ID de usuario', true);
+                    return;
+                }
+                
+                updateResult('vector-stores-result', 'Obteniendo vector stores...');
+                const response = await window.apiClient.getUserVectorStores(userId.trim());
+                updateResult('vector-stores-result', `Vector Stores:\n${JSON.stringify(response, null, 2)}`);
+            } catch (error) {
+                updateResult('vector-stores-result', `Error: ${error.message}`, true);
+            }
+        }
+
+        async function testGetUserChats() {
+            try {
+                const userId = document.getElementById('userForChats').value;
+                const vectorStore = document.getElementById('vectorStoreForChats').value;
+                
+                if (!userId.trim() || !vectorStore.trim()) {
+                    updateResult('chats-result', 'Error: Ingresa usuario y vector store', true);
+                    return;
+                }
+                
+                updateResult('chats-result', 'Obteniendo chats...');
+                const response = await window.apiClient.getUserChats(userId.trim(), vectorStore.trim());
+                updateResult('chats-result', `Chats:\n${JSON.stringify(response, null, 2)}`);
+            } catch (error) {
+                updateResult('chats-result', `Error: ${error.message}`, true);
+            }
+        }
+
+        async function testSendMessage() {
+            try {
+                const userId = document.getElementById('messageUser').value;
+                const message = document.getElementById('messageText').value;
+                
+                if (!userId.trim() || !message.trim()) {
+                    updateResult('message-result', 'Error: Ingresa usuario y mensaje', true);
+                    return;
+                }
+                
+                updateResult('message-result', 'Enviando mensaje...');
+                const response = await window.apiClient.sendMessage(message.trim(), {
+                    userId: userId.trim(),
+                    vectorStore: 'combined',
+                    chatId: 'default'
+                });
+                updateResult('message-result', `Respuesta:\n${JSON.stringify(response, null, 2)}`);
+            } catch (error) {
+                updateResult('message-result', `Error: ${error.message}`, true);
+            }
+        }
+
+        // Probar conexión automáticamente al cargar
+        window.addEventListener('load', () => {
+            setTimeout(testConnection, 1000);
+        });
+    </script>
+</body>
+</html> 

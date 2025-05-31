@@ -8,10 +8,13 @@ const App = () => {
     const [vectorStores, setVectorStores] = useState([]);
     const [selectedVectorStore, setSelectedVectorStore] = useState('combined');
     const [error, setError] = useState(null);
-    
+
     // Estados para gestión de usuarios y chats
     const [selectedUser, setSelectedUser] = useState(null);
     const [selectedChat, setSelectedChat] = useState(null);
+    
+    // Estado para sidebar collapsable
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
     // Inicialización de la aplicación
     useEffect(() => {
@@ -132,12 +135,12 @@ const App = () => {
             <div className="app">
                 <div className="app-header">
                     <div className="header-left">
-                        <div className="header-title">
-                            <h1>
-                                <i className="fas fa-robot"></i>
-                                LangChain Document Chat
-                            </h1>
-                            <div className="header-subtitle">Cliente Web</div>
+                    <div className="header-title">
+                        <h1>
+                            <i className="fas fa-robot"></i>
+                            LangChain Document Chat
+                        </h1>
+                        <div className="header-subtitle">Cliente Web</div>
                         </div>
                     </div>
                     <div className="header-controls">
@@ -194,58 +197,109 @@ const App = () => {
             {/* Header */}
             <header className="app-header">
                 <div className="header-left">
-                    <div className="header-title">
-                        <h1>
-                            <i className="fas fa-robot"></i>
-                            LangChain Document Chat
-                        </h1>
-                        <div className="header-subtitle">
-                            Asistente Inteligente de Documentos
+                <div className="header-title">
+                    <h1>
+                        <i className="fas fa-robot"></i>
+                        LangChain Document Chat
+                    </h1>
+                    <div className="header-subtitle">
+                        Asistente Inteligente de Documentos
                         </div>
                     </div>
-                    
-                    {selectedUser && (
-                        <div className="user-info">
-                            <div className="user-avatar">
-                                {userInfo.avatar}
-                            </div>
-                            <div className="user-details">
-                                <div className="user-name">{userInfo.name}</div>
-                                <div className="user-status">{userInfo.status}</div>
-                            </div>
-                        </div>
-                    )}
                 </div>
                 
                 <div className="header-controls">
-                    <window.ThemeToggle />
                     <div className="status-indicator">
                         <div className="status-dot"></div>
                         <span>Conectado</span>
                     </div>
+                    <window.ThemeToggle />
+                    <window.AccountMenu
+                        selectedUser={selectedUser}
+                        onUserChange={handleUserChange}
+                        onChatChange={handleChatChange}
+                    />
                 </div>
             </header>
 
             {/* Main Content */}
             <main className="app-main">
-                {/* Sidebar */}
-                <aside className="sidebar">
-                    {/* User Management */}
-                    <section className="sidebar-section">
-                        <window.UserManager
-                            onUserChange={handleUserChange}
-                            onChatChange={handleChatChange}
-                            selectedUser={selectedUser}
-                            selectedChat={selectedChat}
-                        />
-                    </section>
+                {/* Center Area - Chat with Tabs */}
+                <section className="main-chat-area">
+                    {selectedUser && (
+                        <div className="chat-tabs">
+                            <div className="chat-tabs-header">
+                                <h3>
+                                    <i className="fas fa-comments"></i>
+                                    Conversaciones de {selectedUser}
+                                </h3>
+                            </div>
+                            <div className="chat-tabs-content">
+                                <window.UserManager
+                                    onUserChange={handleUserChange}
+                                    onChatChange={handleChatChange}
+                                    selectedUser={selectedUser}
+                                    selectedChat={selectedChat}
+                                    tabsOnly={true}
+                                />
+                            </div>
+                        </div>
+                    )}
 
+                    <div className="chat-content">
+                        {selectedUser ? (
+                            <window.ChatInterface
+                                selectedVectorStore={selectedVectorStore}
+                                selectedUser={selectedUser}
+                                selectedChat={selectedChat}
+                                isConnected={isConnected}
+                            />
+                        ) : (
+                            <div className="welcome-message">
+                                <div className="welcome-content">
+                                    <i className="fas fa-robot"></i>
+                                    <h3>¡Bienvenido a LangChain Document Chat!</h3>
+                                    <p>Para comenzar, selecciona un usuario existente o crea uno nuevo desde el menú de cuenta en la parte superior.</p>
+                                    <p>Una vez seleccionado un usuario, podrás empezar a chatear con tus documentos.</p>
+                                    <div className="welcome-features">
+                                        <div className="feature-item">
+                                            <i className="fas fa-upload"></i>
+                                            <span>Sube documentos PDF, TXT o MD</span>
+                                        </div>
+                                        <div className="feature-item">
+                                            <i className="fas fa-search"></i>
+                                            <span>Busca información en tiempo real</span>
+                                        </div>
+                                        <div className="feature-item">
+                                            <i className="fas fa-comments"></i>
+                                            <span>Mantén múltiples conversaciones</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </section>
+
+                {/* Right Sidebar - Tools & Stats (Collapsable) */}
+                <aside className={`tools-sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
+                    <div className="sidebar-toggle">
+                        <button
+                            className="toggle-button"
+                            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                            title={isSidebarCollapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
+                        >
+                            <i className={`fas fa-chevron-${isSidebarCollapsed ? 'left' : 'right'}`}></i>
+                        </button>
+                    </div>
+                    
+                    <div className="tools-sidebar-content">
                     {/* Vector Store Selector */}
                     <section className="sidebar-section">
                         <window.VectorStoreSelector
                             vectorStores={vectorStores}
                             selectedStore={selectedVectorStore}
-                            onStoreChange={handleVectorStoreChange}
+                            onStoreChange={setSelectedVectorStore}
                             isLoading={isLoading}
                         />
                     </section>
@@ -264,28 +318,8 @@ const App = () => {
                             vectorStores={vectorStores}
                         />
                     </section>
+                    </div>
                 </aside>
-
-                {/* Chat Area */}
-                <section className="chat-area">
-                    {selectedUser ? (
-                        <window.ChatInterface
-                            selectedVectorStore={selectedVectorStore}
-                            selectedUser={selectedUser}
-                            selectedChat={selectedChat}
-                            isConnected={isConnected}
-                        />
-                    ) : (
-                        <div className="welcome-message">
-                            <div className="welcome-content">
-                                <i className="fas fa-user-plus"></i>
-                                <h3>¡Bienvenido!</h3>
-                                <p>Para comenzar, selecciona un usuario existente o crea uno nuevo desde el panel lateral.</p>
-                                <p>Una vez seleccionado un usuario, podrás empezar a chatear con tus documentos.</p>
-                            </div>
-                        </div>
-                    )}
-                </section>
             </main>
         </div>
     );

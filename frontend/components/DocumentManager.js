@@ -196,7 +196,8 @@ const DocumentManager = ({ onDocumentUploaded, isLoading }) => {
 const DocumentStats = ({ vectorStores }) => {
     const [stats, setStats] = React.useState({
         totalStores: 0,
-        totalDocuments: 0,
+        combinedStore: false,
+        individualStores: 0,
         lastUpdate: new Date().toLocaleString()
     });
 
@@ -208,9 +209,14 @@ const DocumentStats = ({ vectorStores }) => {
         // Asegurar que vectorStores es un array
         const storesArray = Array.isArray(vectorStores) ? vectorStores : [];
         
+        // Verificar si existe el almacén combinado
+        const hasCombined = storesArray.includes('combined');
+        const individualStores = hasCombined ? storesArray.length - 1 : storesArray.length;
+        
         setStats({
             totalStores: storesArray.length,
-            totalDocuments: storesArray.length * 3, // Simulado
+            combinedStore: hasCombined,
+            individualStores: individualStores,
             lastUpdate: new Date().toLocaleString()
         });
     };
@@ -229,8 +235,27 @@ const DocumentStats = ({ vectorStores }) => {
                 </div>
                 
                 <div className="stat-item">
-                    <div className="stat-value">{stats.totalDocuments}</div>
-                    <div className="stat-label">Documentos</div>
+                    <div className="stat-value">{stats.individualStores}</div>
+                    <div className="stat-label">Documentos Individuales</div>
+                </div>
+                
+                {stats.combinedStore && (
+                    <div className="stat-item combined">
+                        <div className="stat-value">
+                            <i className="fas fa-layer-group"></i>
+                        </div>
+                        <div className="stat-label">Base Combinada</div>
+                    </div>
+                )}
+            </div>
+
+            <div className="stats-info">
+                <div className="stat-description">
+                    <small>
+                        <i className="fas fa-info-circle"></i>
+                        <strong>Bases de Conocimiento:</strong> Cada documento subido crea una base individual 
+                        y se agrega a la base combinada para búsquedas globales.
+                    </small>
                 </div>
             </div>
 

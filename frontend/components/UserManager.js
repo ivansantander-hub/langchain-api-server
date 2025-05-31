@@ -1,7 +1,7 @@
 // Componente para gestión de usuarios y chats
 const { useState, useEffect } = React;
 
-const UserManager = ({ onUserChange, onChatChange, selectedUser, selectedChat }) => {
+const UserManager = ({ onUserChange, onChatChange, selectedUser, selectedChat, compact = false, tabsOnly = false }) => {
     const [users, setUsers] = useState([]);
     const [chats, setChats] = useState([]);
     const [showNewUserForm, setShowNewUserForm] = useState(false);
@@ -50,17 +50,28 @@ const UserManager = ({ onUserChange, onChatChange, selectedUser, selectedChat })
     const loadUsers = async () => {
         try {
             setIsLoading(true);
-            const response = await window.apiClient.getUsers();
-            setUsers(response.users || []);
             setError(null);
+            const response = await window.apiClient.getUsers();
+            
+            // Manejar diferentes formatos de respuesta
+            let usersList = [];
+            if (response && Array.isArray(response.users)) {
+                usersList = response.users;
+            } else if (response && Array.isArray(response)) {
+                usersList = response;
+            } else if (response && typeof response === 'object' && response.users) {
+                usersList = response.users || [];
+            }
+            
+            setUsers(usersList);
             
             // Si no hay usuario seleccionado pero hay usuarios disponibles, seleccionar el primero
-            if (!selectedUser && response.users && response.users.length > 0) {
-                onUserChange(response.users[0]);
+            if (!selectedUser && usersList.length > 0) {
+                onUserChange(usersList[0]);
             }
         } catch (error) {
             console.error('Error loading users:', error);
-            setError('Error al cargar usuarios');
+            setError('Error al cargar usuarios: ' + error.message);
             setUsers([]);
         } finally {
             setIsLoading(false);
@@ -275,12 +286,86 @@ const UserManager = ({ onUserChange, onChatChange, selectedUser, selectedChat })
         setEditingChatName('');
     };
 
+    // Modo solo tabs (para la parte superior)
+    if (tabsOnly) {
+        return (
+            <div className="chat-tabs-only">
+                {selectedUser && chats.length > 0 && (
+                    <div className="chat-tabs-list">
+                        {chats.map(chat => (
+                            <div
+                                key={`${chat.vectorStore}-${chat.id}`}
+                                className={`chat-tab ${selectedChat && 
+                                    selectedChat.id === chat.id && 
+                                    selectedChat.vectorStore === chat.vectorStore ? 'active' : ''}`}
+                                onClick={() => handleChatSelect(chat)}
+                                title={chat.preview}
+                            >
+                                {editingChatId === chat.id ? (
+                                    <div className="chat-edit-form" onClick={(e) => e.stopPropagation()}>
+                                        <input
+                                            type="text"
+                                            value={editingChatName}
+                                            onChange={(e) => setEditingChatName(e.target.value)}
+                                            className="chat-name-input"
+                                            onKeyPress={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    handleSaveChatName(chat);
+                                                } else if (e.key === 'Escape') {
+                                                    handleCancelEditChatName();
+                                                }
+                                            }}
+                                            onBlur={() => handleSaveChatName(chat)}
+                                            autoFocus
+                                            maxLength={30}
+                                        />
+                                    </div>
+                                ) : (
+                                    <>
+                                        <span className="chat-tab-name">{chat.displayName}</span>
+                                        <div className="chat-tab-actions">
+                                            <button
+                                                className="chat-action-button"
+                                                onClick={(e) => handleEditChatName(chat, e)}
+                                                title="Editar nombre"
+                                            >
+                                                <i className="fas fa-edit"></i>
+                                            </button>
+                                            <button
+                                                className="chat-action-button"
+                                                onClick={(e) => handleDeleteChat(chat, e)}
+                                                title="Eliminar chat"
+                                            >
+                                                <i className="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        ))}
+                        
+                        <button
+                            className="new-chat-tab"
+                            onClick={handleNewChat}
+                            disabled={isLoading}
+                            title="Crear nuevo chat"
+                        >
+                            <i className="fas fa-plus"></i>
+                        </button>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
     return (
-        <div className="user-management">
-            <h3>
-                <i className="fas fa-users"></i>
-                Gestión de Usuarios
-            </h3>
+        <div className={`user-management ${compact ? 'compact' : ''}`}>
+            {!compact && (
+                <h3>
+                    <i className="fas fa-users"></i>
+                    Gestión de Usuarios
+                </h3>
+            )}
             
             {error && (
                 <div className="upload-status error">
@@ -353,8 +438,8 @@ const UserManager = ({ onUserChange, onChatChange, selectedUser, selectedChat })
                 </div>
             )}
 
-            {/* Gestión de Chats */}
-            {selectedUser && (
+            {/* Gestión de Chats - solo en modo no-compact */}
+            {selectedUser && !compact && (
                 <div className="chat-management">
                     <h3>
                         <i className="fas fa-comments"></i>
