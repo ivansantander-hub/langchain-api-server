@@ -1961,6 +1961,46 @@ body {
     transform: none;
 }
 
+/* Quick Actions Loading y Empty States */
+.quick-actions-loading {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    background: var(--bg-color);
+    border-radius: var(--border-radius-sm);
+    border: 1px solid var(--border-color);
+    width: 100%;
+    justify-content: center;
+}
+
+.quick-actions-loading i {
+    color: var(--accent-color);
+}
+
+.quick-actions-empty {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-lg);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    background: var(--bg-color);
+    border-radius: var(--border-radius-sm);
+    border: 2px dashed var(--border-color);
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+    font-style: italic;
+}
+
+.quick-actions-empty i {
+    color: var(--warning-color);
+    font-size: 1rem;
+}
+
 /* Welcome message mejorado */
 .welcome-message {
     display: flex;

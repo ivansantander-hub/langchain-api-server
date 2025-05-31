@@ -6,13 +6,9 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
     const [sessionId] = React.useState(() => window.apiClient.constructor.generateId());
     const messagesEndRef = React.useRef(null);
 
-    const quickActions = [
-        "¿Qué documentos tienes disponibles?",
-        "¿Cuáles son las políticas principales?",
-        "¿Cómo puedo configurar el sistema?",
-        "Muéstrame ejemplos de uso",
-        "¿Qué procedimientos debo seguir?"
-    ];
+    // Estado para quick actions dinámicas
+    const [quickActions, setQuickActions] = React.useState([]);
+    const [isGeneratingActions, setIsGeneratingActions] = React.useState(false);
 
     React.useEffect(() => {
         scrollToBottom();
@@ -24,6 +20,27 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
             addSystemMessage(`Conectado a: ${getStoreDisplayName(selectedVectorStore)}`);
         }
     }, [selectedVectorStore]);
+
+    // Efecto para generar quick actions cuando cambia el vector store
+    React.useEffect(() => {
+        if (selectedVectorStore) {
+            generateContextualActions();
+        }
+    }, [selectedVectorStore, generateContextualActions]);
+
+    // Efecto para actualizar quick actions cuando cambian los mensajes
+    React.useEffect(() => {
+        // Solo regenerar después de respuestas del asistente
+        const lastMessage = messages[messages.length - 1];
+        if (lastMessage && lastMessage.type === 'assistant') {
+            // Debounce para evitar demasiadas regeneraciones
+            const timer = setTimeout(() => {
+                generateContextualActions();
+            }, 1000);
+            
+            return () => clearTimeout(timer);
+        }
+    }, [messages, generateContextualActions]);
 
     // Cargar historial cuando cambia el chat seleccionado
     React.useEffect(() => {
@@ -102,6 +119,223 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
             default:
                 return storeName.charAt(0).toUpperCase() + storeName.slice(1);
         }
+    };
+
+    // Función para generar quick actions basadas en el contexto
+    const generateContextualActions = React.useCallback(async () => {
+        if (!selectedVectorStore || isGeneratingActions) return;
+
+        try {
+            setIsGeneratingActions(true);
+            
+            // Todas las acciones serán dinámicas basadas en el contexto
+            const contextualActions = [];
+            
+            // Generar sugerencias basadas en el contexto actual
+            if (messages.length > 0) {
+                // Hay conversación previa - generar sugerencias contextuales
+                const lastUserMessages = messages
+                    .filter(msg => msg.type === 'user')
+                    .slice(-3) // Últimos 3 mensajes del usuario
+                    .map(msg => msg.content);
+
+                const lastAssistantMessages = messages
+                    .filter(msg => msg.type === 'assistant' && msg.sources)
+                    .slice(-2); // Últimas 2 respuestas con fuentes
+
+                // Generar acciones de seguimiento basadas en temas
+                if (lastUserMessages.length > 0) {
+                    const lastMessage = lastUserMessages[lastUserMessages.length - 1];
+                    const topics = extractTopicsFromMessage(lastMessage);
+                    
+                    topics.forEach(topic => {
+                        contextualActions.push(
+                            `¿Hay más información sobre ${topic}?`,
+                            `¿Qué ejemplos específicos hay de ${topic}?`,
+                            `¿Cómo se aplica ${topic} en la práctica?`
+                        );
+                    });
+                }
+
+                // Acciones basadas en fuentes mencionadas en respuestas previas
+                if (lastAssistantMessages.length > 0) {
+                    const uniqueSources = new Set();
+                    lastAssistantMessages.forEach(msg => {
+                        if (msg.sources) {
+                            msg.sources.forEach(source => {
+                                if (source.document) {
+                                    uniqueSources.add(source.document);
+                                }
+                            });
+                        }
+                    });
+
+                    Array.from(uniqueSources).slice(0, 2).forEach(document => {
+                        contextualActions.push(
+                            `¿Qué más información hay en ${document}?`,
+                            `¿Hay otros temas en ${document}?`
+                        );
+                    });
+                }
+
+                // Acciones de profundización inteligentes
+                const conversationContext = analyzeConversationContext(messages);
+                contextualActions.push(...generateDeepDiveActions(conversationContext));
+
+            } else {
+                // Nueva conversación - generar sugerencias de inicio basadas en el vector store
+                const storeSpecificActions = generateInitialActions(selectedVectorStore);
+                contextualActions.push(...storeSpecificActions);
+            }
+
+            // Filtrar duplicados y limitar a 5 sugerencias máximo
+            const uniqueActions = [...new Set(contextualActions)]
+                .slice(0, 5);
+
+            setQuickActions(uniqueActions);
+
+        } catch (error) {
+            console.error('Error generating contextual actions:', error);
+            // Fallback dinámico basado en el vector store
+            const fallbackActions = generateInitialActions(selectedVectorStore || 'combined');
+            setQuickActions(fallbackActions.slice(0, 4));
+        } finally {
+            setIsGeneratingActions(false);
+        }
+    }, [selectedVectorStore, messages, isGeneratingActions]);
+
+    // Función auxiliar para extraer múltiples temas de los mensajes
+    const extractTopicsFromMessage = (message) => {
+        // Buscar palabras clave importantes y extraer múltiples temas
+        const keywords = message.toLowerCase().match(/\b(política|procedimiento|configurar|sistema|proceso|documento|archivo|ejemplo|información|datos|usuario|acceso|permiso|manual|guía|instalación|configuración|uso|funcionalidad|característica|pasos|instrucciones|tutorial|seguridad|backup|mantenimiento|actualización|error|problema|solución)\w*/gi);
+        return keywords ? [...new Set(keywords.slice(0, 3))] : []; // Máximo 3 temas únicos
+    };
+
+    // Analizar el contexto general de la conversación
+    const analyzeConversationContext = (messages) => {
+        const userMessages = messages.filter(msg => msg.type === 'user');
+        const assistantMessages = messages.filter(msg => msg.type === 'assistant');
+        
+        // Detectar patrones en la conversación
+        const context = {
+            isQuestioningBasics: userMessages.some(msg => 
+                /\b(qué es|cómo|cuál|dónde|por qué|para qué)\b/i.test(msg.content)
+            ),
+            isSeekingExamples: userMessages.some(msg => 
+                /\b(ejemplo|muestra|ilustra|caso|práctica|aplicación)\b/i.test(msg.content)
+            ),
+            isSeekingProcedures: userMessages.some(msg => 
+                /\b(pasos|proceso|procedimiento|cómo hacer|tutorial|guía)\b/i.test(msg.content)
+            ),
+            hasTechnicalFocus: userMessages.some(msg => 
+                /\b(configurar|instalar|sistema|técnico|error|problema)\b/i.test(msg.content)
+            ),
+            hasDocumentReferences: assistantMessages.some(msg => msg.sources && msg.sources.length > 0)
+        };
+        
+        return context;
+    };
+
+    // Generar acciones de profundización basadas en el contexto
+    const generateDeepDiveActions = (context) => {
+        const actions = [];
+        
+        if (context.isQuestioningBasics) {
+            actions.push("¿Puedes explicarlo de manera más simple?", "¿Hay conceptos previos que deba conocer?");
+        }
+        
+        if (context.isSeekingExamples) {
+            actions.push("¿Tienes más ejemplos similares?", "¿Hay casos de uso reales?");
+        }
+        
+        if (context.isSeekingProcedures) {
+            actions.push("¿Cuáles son los siguientes pasos?", "¿Hay alguna precaución que deba tomar?");
+        }
+        
+        if (context.hasTechnicalFocus) {
+            actions.push("¿Qué errores comunes debo evitar?", "¿Hay requisitos técnicos específicos?");
+        }
+        
+        if (context.hasDocumentReferences) {
+            actions.push("¿Hay información relacionada en otros documentos?", "¿Esto se conecta con otros temas?");
+        }
+        
+        // Acciones genéricas de profundización
+        actions.push("¿Puedes dar más detalles?", "¿Hay información adicional importante?");
+        
+        return actions.slice(0, 3); // Máximo 3 acciones de profundización
+    };
+
+    // Generar acciones iniciales específicas del vector store
+    const generateInitialActions = (vectorStore) => {
+        if (vectorStore === 'combined') {
+            return [
+                "¿Qué tipos de documentos están disponibles?",
+                "¿Cuáles son los temas principales que puedes consultar?",
+                "¿Cómo puedo navegar por toda la información?",
+                "¿Qué documentos son más útiles para empezar?",
+                "¿Hay algún orden recomendado para revisar la información?"
+            ];
+        } else {
+            // Para documentos específicos, usar el mapeo inteligente
+            const specificActions = getDocumentSpecificActions(vectorStore);
+            const storeName = getStoreDisplayName(vectorStore);
+            
+            return [
+                ...specificActions,
+                `¿Cuál es la estructura de ${storeName}?`,
+                `¿Qué temas cubre ${storeName}?`,
+                `¿Para qué audiencia está dirigido ${storeName}?`
+            ];
+        }
+    };
+
+    // Función para obtener acciones específicas del documento
+    const getDocumentSpecificActions = (storeName) => {
+        const storeNameLower = storeName.toLowerCase();
+        
+        // Mapeo de documentos conocidos a preguntas específicas
+        const documentMappings = {
+            'manual': [
+                "¿Cómo se instala el sistema?",
+                "¿Cuáles son los requisitos del sistema?",
+                "¿Cómo se configuran las opciones básicas?"
+            ],
+            'política': [
+                "¿Cuáles son las reglas de uso?",
+                "¿Qué está permitido y qué no?",
+                "¿Cuáles son las sanciones por incumplimiento?"
+            ],
+            'procedimiento': [
+                "¿Cuáles son los pasos a seguir?",
+                "¿Quién es responsable de cada tarea?",
+                "¿Qué documentos se necesitan?"
+            ],
+            'tutorial': [
+                "¿Cómo empiezo?",
+                "¿Cuáles son los ejemplos paso a paso?",
+                "¿Dónde puedo practicar?"
+            ],
+            'faq': [
+                "¿Cuáles son las preguntas más frecuentes?",
+                "¿Dónde encontrar soluciones a problemas comunes?",
+                "¿Cómo contactar soporte técnico?"
+            ]
+        };
+
+        // Buscar coincidencias en el nombre del documento
+        for (const [key, actions] of Object.entries(documentMappings)) {
+            if (storeNameLower.includes(key)) {
+                return actions;
+            }
+        }
+
+        // Acciones genéricas si no se encuentra un mapeo específico
+        return [
+            "¿Cuál es el contenido principal?",
+            "¿Qué información importante contiene?",
+            "¿Hay ejemplos prácticos?"
+        ];
     };
 
     const addMessage = (type, content, sources = null) => {
@@ -311,16 +545,31 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
 
                 {/* Acciones rápidas */}
                 <div className="quick-actions">
-                    {quickActions.map((action, index) => (
-                        <button
-                            key={index}
-                            className="quick-action-button"
-                            onClick={() => handleQuickAction(action)}
-                            disabled={isLoading || !isConnected}
-                        >
-                            {action}
-                        </button>
-                    ))}
+                    {isGeneratingActions ? (
+                        <div className="quick-actions-loading">
+                            <i className="fas fa-spinner fa-spin"></i>
+                            <span>Generando sugerencias...</span>
+                        </div>
+                    ) : (
+                        quickActions.map((action, index) => (
+                            <button
+                                key={index}
+                                className="quick-action-button"
+                                onClick={() => handleQuickAction(action)}
+                                disabled={isLoading || !isConnected}
+                                title={`Pregunta sugerida: ${action}`}
+                            >
+                                {action}
+                            </button>
+                        ))
+                    )}
+                    
+                    {quickActions.length === 0 && !isGeneratingActions && (
+                        <div className="quick-actions-empty">
+                            <i className="fas fa-lightbulb"></i>
+                            <span>Las sugerencias aparecerán aquí basadas en tu conversación</span>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

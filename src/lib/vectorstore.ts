@@ -1,5 +1,5 @@
 import { OpenAIEmbeddings } from '@langchain/openai';
-import { FaissStore } from '@langchain/community/vectorstores/faiss';
+import { HNSWLib } from '@langchain/community/vectorstores/hnswlib';
 import { Document } from "langchain/document";
 import * as fs from 'fs';
 import * as path from 'path';
@@ -16,7 +16,7 @@ export function createEmbeddings() {
 // Class to manage multiple vector stores
 export class VectorStoreManager {
   private embeddings: OpenAIEmbeddings;
-  private vectorStores: Map<string, FaissStore> = new Map();
+  private vectorStores: Map<string, HNSWLib> = new Map();
   private baseDir: string = './vectorstores';
   
   constructor(embeddings: OpenAIEmbeddings) {
@@ -28,7 +28,7 @@ export class VectorStoreManager {
   }
   
   // Load or create a vector store with a specific name
-  async loadOrCreateVectorStore(name: string, docs?: Document[]): Promise<FaissStore> {
+  async loadOrCreateVectorStore(name: string, docs?: Document[]): Promise<HNSWLib> {
     const storePath = path.join(this.baseDir, name);
     
     // Check if the store already exists
@@ -39,7 +39,7 @@ export class VectorStoreManager {
     try {
       // Try to load existing vector store
       console.log(`Trying to load existing vector store: ${name}...`);
-      const store = await FaissStore.load(storePath, this.embeddings);
+      const store = await HNSWLib.load(storePath, this.embeddings);
       this.vectorStores.set(name, store);
       return store;
     } catch (error) {
@@ -50,7 +50,7 @@ export class VectorStoreManager {
       
       // Create a new vector store
       console.log(`Creating new vector store: ${name}...`);
-      const store = await FaissStore.fromDocuments(docs, this.embeddings);
+      const store = await HNSWLib.fromDocuments(docs, this.embeddings);
       await store.save(storePath);
       this.vectorStores.set(name, store);
       return store;
@@ -150,14 +150,14 @@ export class VectorStoreManager {
 export async function loadVectorStore(
   splitDocs: Document[], 
   embeddings: OpenAIEmbeddings
-): Promise<FaissStore> {
+): Promise<HNSWLib> {
   try {
     console.log('Trying to load existing vector store...');
-    return await FaissStore.load('./vectorstore', embeddings);
+    return await HNSWLib.load('./vectorstore', embeddings);
   } catch {
     console.log('No existing vector store found, creating a new one...');
     // If it doesn't exist, create a new one
-    const vectorStore = await FaissStore.fromDocuments(splitDocs, embeddings);
+    const vectorStore = await HNSWLib.fromDocuments(splitDocs, embeddings);
     await vectorStore.save('./vectorstore');
     console.log('Vector store saved in ./vectorstore');
     return vectorStore;
@@ -165,7 +165,7 @@ export async function loadVectorStore(
 }
 
 // Legacy function for backward compatibility
-export function createRetriever(vectorStore: FaissStore) {
+export function createRetriever(vectorStore: HNSWLib) {
   return vectorStore.asRetriever({
     k: 5,
     searchType: 'similarity',

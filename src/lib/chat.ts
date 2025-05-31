@@ -25,16 +25,18 @@ export async function initializeChat() {
   console.log(`Found ${documentNames.length} documents in docs directory`);
   
   // Create or load combined vector store
-  if (!combinedStoreExists) {
+  if (!combinedStoreExists && documentNames.length > 0) {
     // If combined store doesn't exist, create it with all documents
     console.log('Creating combined vector store from all documents...');
     const docs = await loadDocuments();
     const splitDocs = await splitDocuments(docs);
     await vectorStoreManager.loadOrCreateVectorStore('combined', splitDocs);
-  } else {
-    // Load existing combined store
+  } else if (combinedStoreExists) {
+    // Load existing combined store only if it exists
     console.log('Loading existing combined vector store...');
     await vectorStoreManager.loadOrCreateVectorStore('combined');
+  } else {
+    console.log('No documents available and no existing combined store. Will create when documents are added.');
   }
   
   // Get existing vector stores (other than combined)
@@ -76,12 +78,21 @@ export async function initializeChat() {
     }
   }
   
-  // Use the combined store by default
-  const defaultRetriever = vectorStoreManager.getRetriever('combined');
-  
-  // Initialize model and chain with the default retriever
+  // Initialize model first
   const model = createLanguageModel();
-  const defaultChain = createChatChain(model, defaultRetriever);
+  
+  // Try to get combined store retriever, fallback to null if doesn't exist
+  let defaultRetriever = null;
+  let defaultChain = null;
+  
+  try {
+    if (vectorStoreManager.storeExists('combined')) {
+      defaultRetriever = vectorStoreManager.getRetriever('combined');
+      defaultChain = createChatChain(model, defaultRetriever);
+    }
+  } catch (error) {
+    console.log('Combined store not available yet, will create when needed');
+  }
   
   // Create a manager function to handle chat state
   const chatManager = {
@@ -98,6 +109,14 @@ export async function initializeChat() {
         if (storeName !== 'combined') {
           const retriever = this.vectorStoreManager.getRetriever(storeName);
           chain = createChatChain(this.model, retriever);
+        } else if (!chain) {
+          // If no default chain and requesting combined, try to create it
+          if (this.vectorStoreManager.storeExists('combined')) {
+            const retriever = this.vectorStoreManager.getRetriever('combined');
+            chain = createChatChain(this.model, retriever);
+          } else {
+            throw new Error('No vector stores available. Please upload documents first.');
+          }
         }
         
         // Get chat history for this user, vector store, and chat
