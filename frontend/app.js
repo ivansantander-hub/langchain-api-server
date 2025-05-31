@@ -19,6 +19,8 @@ const App = () => {
     // Inicialización de la aplicación
     useEffect(() => {
         initializeApp();
+        // Restaurar último usuario y chat desde localStorage
+        restoreLastSession();
     }, []);
 
     const initializeApp = async () => {
@@ -98,14 +100,55 @@ const App = () => {
         initializeApp();
     };
 
+    // Restaurar sesión anterior desde localStorage
+    const restoreLastSession = () => {
+        try {
+            console.log('🔄 Restaurando sesión anterior...');
+            
+            // Restaurar último usuario
+            const lastUser = window.StorageUtils.getLastUser();
+            if (lastUser) {
+                console.log('👤 Restaurando usuario:', lastUser);
+                setSelectedUser(lastUser);
+                
+                // Restaurar último chat para el usuario
+                const lastChat = window.StorageUtils.getLastChat();
+                if (lastChat) {
+                    console.log('💬 Restaurando chat:', lastChat);
+                    // Validar que el chat tenga las propiedades necesarias
+                    if (lastChat.id && lastChat.vectorStore) {
+                        setSelectedChat(lastChat);
+                    } else {
+                        console.warn('⚠️ Chat inválido en localStorage, eliminando...');
+                        window.StorageUtils.clearLastChat();
+                    }
+                }
+            } else {
+                console.log('👤 No hay usuario anterior guardado');
+            }
+        } catch (error) {
+            console.warn('⚠️ Error restaurando sesión anterior:', error);
+            // En caso de error, limpiar localStorage para evitar problemas futuros
+            window.StorageUtils.clearAll();
+        }
+    };
+
     const handleUserChange = (userId) => {
         setSelectedUser(userId);
-        // Resetear chat cuando cambia el usuario
+        // Guardar usuario en localStorage
+        window.StorageUtils.saveLastUser(userId);
+        
+        // Resetear chat cuando cambia el usuario y limpiar chat guardado
         setSelectedChat(null);
+        window.StorageUtils.clearLastChat();
     };
 
     const handleChatChange = (chat) => {
         setSelectedChat(chat);
+        // Guardar chat en localStorage
+        if (chat) {
+            window.StorageUtils.saveLastChat(chat);
+        }
     };
 
     // Obtener información del usuario para mostrar en el header
@@ -310,6 +353,11 @@ const App = () => {
                             onDocumentUploaded={handleDocumentUploaded}
                             isLoading={isLoading}
                         />
+                    </section>
+
+                    {/* Session Manager */}
+                    <section className="sidebar-section">
+                        <window.SessionManager />
                     </section>
 
                     {/* Document Stats */}
