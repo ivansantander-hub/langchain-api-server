@@ -1,5 +1,5 @@
 // Componente principal de la interfaz de chat
-const ChatInterface = ({ selectedVectorStore, isConnected }) => {
+const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConnected }) => {
     const [messages, setMessages] = React.useState([]);
     const [inputValue, setInputValue] = React.useState('');
     const [isLoading, setIsLoading] = React.useState(false);
@@ -24,6 +24,72 @@ const ChatInterface = ({ selectedVectorStore, isConnected }) => {
             addSystemMessage(`Conectado a: ${getStoreDisplayName(selectedVectorStore)}`);
         }
     }, [selectedVectorStore]);
+
+    // Cargar historial cuando cambia el chat seleccionado
+    React.useEffect(() => {
+        const loadChatHistory = async () => {
+            if (selectedChat && selectedUser && selectedChat.id) {
+                try {
+                    setIsLoading(true);
+                    setMessages([]); // Limpiar mensajes primero
+                    
+                    // Solo cargar historial si no es un chat completamente nuevo
+                    if (selectedChat.preview !== 'Chat nuevo - Sin mensajes') {
+                        const response = await window.apiClient.getChatMessages(
+                            selectedUser,
+                            selectedChat.vectorStore,
+                            selectedChat.id
+                        );
+                        
+                        if (response.messages && response.messages.length > 0) {
+                            // Convertir el historial del servidor al formato local
+                            const chatMessages = [];
+                            response.messages.forEach((msg, index) => {
+                                // Agregar pregunta del usuario
+                                if (msg.question) {
+                                    chatMessages.push({
+                                        id: `${selectedChat.id}-user-${index}`,
+                                        type: 'user',
+                                        content: msg.question,
+                                        timestamp: new Date(msg.timestamp || Date.now())
+                                    });
+                                }
+                                
+                                // Agregar respuesta del asistente
+                                if (msg.answer) {
+                                    chatMessages.push({
+                                        id: `${selectedChat.id}-assistant-${index}`,
+                                        type: 'assistant',
+                                        content: msg.answer,
+                                        timestamp: new Date(msg.timestamp || Date.now())
+                                    });
+                                }
+                            });
+                            
+                            setMessages(chatMessages);
+                        }
+                    }
+                    
+                    // Agregar mensaje de bienvenida si no hay mensajes
+                    if (selectedChat && selectedVectorStore) {
+                        const welcomeMessage = `Chat: ${selectedChat.displayName} - ${getStoreDisplayName(selectedVectorStore)}`;
+                        addSystemMessage(welcomeMessage);
+                    }
+                    
+                } catch (error) {
+                    console.error('Error loading chat history:', error);
+                    addSystemMessage('Error al cargar el historial del chat');
+                } finally {
+                    setIsLoading(false);
+                }
+            } else {
+                // Si no hay chat seleccionado, limpiar mensajes
+                setMessages([]);
+            }
+        };
+
+        loadChatHistory();
+    }, [selectedChat?.id, selectedUser]); // Observar el ID del chat y el usuario
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -55,7 +121,7 @@ const ChatInterface = ({ selectedVectorStore, isConnected }) => {
     };
 
     const sendMessage = async (messageText) => {
-        if (!messageText.trim() || !isConnected) return;
+        if (!messageText.trim() || !isConnected || !selectedUser) return;
 
         // Agregar mensaje del usuario
         addMessage('user', messageText);
@@ -63,15 +129,32 @@ const ChatInterface = ({ selectedVectorStore, isConnected }) => {
         setIsLoading(true);
 
         try {
+            // Determinar el vector store a usar - priorizar el del chat seleccionado
+            const vectorStoreToUse = selectedChat?.vectorStore || selectedVectorStore;
+            const chatIdToUse = selectedChat?.id || sessionId;
+
             // Enviar mensaje a la API
             const response = await window.apiClient.sendMessage(messageText, {
-                vectorStore: selectedVectorStore,
-                userId: 'web-client',
-                chatId: sessionId
+                vectorStore: vectorStoreToUse,
+                userId: selectedUser,
+                chatId: chatIdToUse
             });
 
             // Agregar respuesta del asistente
             addMessage('assistant', response.answer, response.sources);
+
+            // Si es un nuevo chat (no estaba en la lista), disparar evento para actualizar la lista
+            if (selectedChat && selectedChat.preview === 'Chat nuevo - Sin mensajes') {
+                // Notificar al componente padre que el chat ha sido usado
+                window.dispatchEvent(new CustomEvent('chatFirstMessage', {
+                    detail: {
+                        chatId: selectedChat.id,
+                        userId: selectedUser,
+                        vectorStore: vectorStoreToUse,
+                        firstMessage: messageText.slice(0, 50) + (messageText.length > 50 ? '...' : '')
+                    }
+                }));
+            }
 
         } catch (error) {
             console.error('Error sending message:', error);
@@ -139,7 +222,7 @@ const ChatInterface = ({ selectedVectorStore, isConnected }) => {
                         Chat con Documentos
                     </h2>
                     <span className="chat-subtitle">
-                        Sesión: {sessionId.slice(-8)} | Base: {getStoreDisplayName(selectedVectorStore)}
+                        Usuario: {selectedUser} | Chat: {selectedChat?.id?.slice(-8) || sessionId.slice(-8)} | Base: {getStoreDisplayName(selectedVectorStore)}
                     </span>
                 </div>
                 

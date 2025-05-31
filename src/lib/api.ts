@@ -34,7 +34,14 @@ export function createApiServer(
 
   // Middleware
   app.use(cors());
-  app.use(express.json({ limit: '10mb' }));
+  app.use(express.json({ limit: '50mb' })); // Increase limit for large files
+  
+  // Add timeout middleware for file uploads
+  app.use('/api/add-document', (req, res, next) => {
+    req.setTimeout(300000); // 5 minutes timeout for uploads
+    res.setTimeout(300000);
+    next();
+  });
 
   // Serve static files from the frontend directory
   const publicPath = path.join(__dirname, '../../frontend');
@@ -76,6 +83,8 @@ export function createApiServer(
 
   // Endpoint to add a document to vector stores
   app.post('/api/add-document', async (req: any, res: any) => {
+    let savedFilename: string | null = null;
+    
     try {
       const { filename, content } = req.body as AddDocumentRequest;
       
@@ -84,19 +93,33 @@ export function createApiServer(
       }
 
       console.log(`Received document upload request: ${filename}`);
+      console.log(`Content size: ${content.length} characters`);
+      
+      // Validate file size (prevent memory issues)
+      if (content.length > 10000000) { // 10MB text limit
+        return res.status(413).json({ error: 'File too large. Maximum size is 10MB.' });
+      }
       
       // Save the document to the docs directory
-      const savedFilename = await saveUploadedDocument(content, filename);
+      savedFilename = await saveUploadedDocument(content, filename);
+      console.log(`Document saved successfully: ${savedFilename}`);
       
       // Load and process the document
+      console.log('Loading document...');
       const docLoaded = await loadSingleDocument(savedFilename);
+      
+      console.log('Splitting document...');
       const docChunks = await splitDocuments(docLoaded);
       
       // Add to vector stores (individual and combined)
+      console.log('Adding to vector stores...');
       await vectorStoreManager.addDocumentToVectorStores(savedFilename, docChunks);
+      
+      console.log(`Document ${savedFilename} processing completed successfully`);
       
       res.json({ 
         message: `Document ${savedFilename} successfully added to vector stores`,
+        chunks: docChunks.length,
         vectorStores: [
           savedFilename.replace(/\.[^/.]+$/, ""), // Individual store
           'combined' // Combined store
@@ -104,7 +127,28 @@ export function createApiServer(
       });
     } catch (error) {
       console.error('Error processing document upload:', error);
-      res.status(500).json({ error: 'Failed to process document upload' });
+      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack available');
+      
+      // Attempt to clean up partially saved file if error occurred after saving
+      if (savedFilename) {
+        try {
+          const fs = require('fs');
+          const path = require('path');
+          const filepath = path.join('./docs', savedFilename);
+          if (fs.existsSync(filepath)) {
+            console.log(`Cleaning up partially processed file: ${savedFilename}`);
+            // Don't delete - keep the file for manual retry
+          }
+        } catch (cleanupError) {
+          console.error('Error during cleanup:', cleanupError);
+        }
+      }
+      
+      res.status(500).json({ 
+        error: 'Failed to process document upload',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        filename: savedFilename
+      });
     }
   });
 
@@ -216,10 +260,22 @@ export function createApiServer(
     });
   });
 
+  // Global error handlers to prevent server crashes
+  process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+    console.error('Stack:', error.stack);
+    // Don't exit the process, just log the error
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    // Don't exit the process, just log the error
+  });
+
   // Function to start the server
   const startServer = () => {
     return new Promise<void>((resolve) => {
-      app.listen(PORT, () => {
+      const server = app.listen(PORT, () => {
         console.log(`\nAPI server running at http://localhost:${PORT}`);
         console.log('You can send questions to /api/chat endpoint');
         console.log('To specify a vector store, include "vectorStore" in your request');
@@ -228,6 +284,10 @@ export function createApiServer(
         console.log('You can add documents using the /api/add-document endpoint');
         resolve();
       });
+
+      // Set server timeout to handle large file uploads
+      server.timeout = 300000; // 5 minutes
+      server.keepAliveTimeout = 120000; // 2 minutes
     });
   };
 

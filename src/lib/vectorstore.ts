@@ -63,26 +63,55 @@ export class VectorStoreManager {
     const storeName = documentName.replace(/\.[^/.]+$/, "");
     
     console.log(`Adding document ${documentName} to vector stores...`);
+    console.log(`Document chunks: ${documentChunks.length}`);
+    
+    let individualStoreSuccess = false;
+    let combinedStoreSuccess = false;
     
     try {
       // 1. Add to individual vector store
       console.log(`Adding to individual store: ${storeName}`);
-      const individualStore = await this.loadOrCreateVectorStore(storeName, documentChunks);
-      // If the store already existed, add the new chunks
-      if (this.storeExists(storeName)) {
-        await individualStore.addDocuments(documentChunks);
-        await individualStore.save(path.join(this.baseDir, storeName));
+      try {
+        const individualStore = await this.loadOrCreateVectorStore(storeName, documentChunks);
+        // If the store already existed, add the new chunks
+        if (this.storeExists(storeName) && individualStore !== null) {
+          console.log(`Store ${storeName} already exists, adding new documents...`);
+          await individualStore.addDocuments(documentChunks);
+          await individualStore.save(path.join(this.baseDir, storeName));
+        }
+        individualStoreSuccess = true;
+        console.log(`Successfully added to individual store: ${storeName}`);
+      } catch (individualError) {
+        console.error(`Error adding to individual store ${storeName}:`, individualError);
+        // Continue with combined store even if individual fails
       }
       
       // 2. Add to combined vector store
       console.log('Adding to combined store');
-      const combinedStore = await this.loadOrCreateVectorStore('combined');
-      await combinedStore.addDocuments(documentChunks);
-      await combinedStore.save(path.join(this.baseDir, 'combined'));
+      try {
+        const combinedStore = await this.loadOrCreateVectorStore('combined');
+        if (combinedStore !== null) {
+          await combinedStore.addDocuments(documentChunks);
+          await combinedStore.save(path.join(this.baseDir, 'combined'));
+          combinedStoreSuccess = true;
+          console.log('Successfully added to combined store');
+        }
+      } catch (combinedError) {
+        console.error('Error adding to combined store:', combinedError);
+                 // If neither store succeeded, throw error
+         if (!individualStoreSuccess) {
+           throw new Error(`Failed to add document to both individual and combined stores. Combined: ${combinedError instanceof Error ? combinedError.message : 'Unknown error'}`);
+         }
+      }
       
-      console.log(`Document ${documentName} successfully added to both stores`);
+      if (individualStoreSuccess || combinedStoreSuccess) {
+        console.log(`Document ${documentName} successfully added to ${individualStoreSuccess ? 'individual' : ''}${individualStoreSuccess && combinedStoreSuccess ? ' and ' : ''}${combinedStoreSuccess ? 'combined' : ''} store(s)`);
+      } else {
+        throw new Error('Failed to add document to any vector store');
+      }
     } catch (error) {
       console.error(`Error adding document ${documentName} to vector stores:`, error);
+      console.error('Error details:', error instanceof Error ? error.stack : 'No stack available');
       throw error;
     }
   }

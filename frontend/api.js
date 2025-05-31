@@ -88,6 +88,16 @@ class APIClient {
         return this.request(`/api/users/${userId}/vector-stores/${vectorName}/chats`);
     }
 
+    // Obtener chats de un usuario y vector store (alias para compatibilidad)
+    async getUserVectorChats(userId, vectorName) {
+        return this.getUserChats(userId, vectorName);
+    }
+
+    // Obtener mensajes de un chat específico
+    async getChatMessages(userId, vectorName, chatId) {
+        return this.request(`/api/users/${userId}/vector-stores/${vectorName}/chats/${chatId}/messages`);
+    }
+
     // Obtener historial de mensajes
     async getChatHistory(userId, vectorName, chatId) {
         return this.request(`/api/users/${userId}/vector-stores/${vectorName}/chats/${chatId}/messages`);
