@@ -187,23 +187,61 @@ export function createApiServer(
       }
 
       console.log(`Received document upload request: ${filename}`);
-      console.log(`Content size: ${content.length} characters`);
+      console.log(`Content type: ${filename.toLowerCase().endsWith('.pdf') ? 'PDF (base64)' : 'Text'}`);
       
       // Validate file size (prevent memory issues)
-      if (content.length > 10000000) { // 10MB text limit
-        return res.status(413).json({ error: 'File too large. Maximum size is 10MB.' });
+      if (content.length > 50000000) { // 50MB limit for base64 content
+        return res.status(413).json({ error: 'File too large. Maximum size is 50MB.' });
       }
       
-      // Save the document to the docs directory
-      savedFilename = await saveUploadedDocument(content, filename);
-      console.log(`Document saved successfully: ${savedFilename}`);
+      // Handle PDF files differently
+      if (filename.toLowerCase().endsWith('.pdf')) {
+        console.log('Processing PDF file...');
+        
+        // For PDF files, content is base64 encoded, we need to save it as binary
+        const fs = require('fs');
+        const path = require('path');
+        
+        // Ensure docs directory exists
+        if (!fs.existsSync('./docs')) {
+          fs.mkdirSync('./docs', { recursive: true });
+        }
+        
+        savedFilename = filename;
+        const filepath = path.join('./docs', savedFilename);
+        
+        // Decode base64 and save as binary PDF
+        const binaryContent = Buffer.from(content, 'base64');
+        fs.writeFileSync(filepath, binaryContent);
+        console.log(`PDF saved to: ${filepath} (${binaryContent.length} bytes)`);
+        
+      } else {
+        // For text files, save as before
+        savedFilename = await saveUploadedDocument(content, filename);
+        console.log(`Text document saved: ${savedFilename}`);
+      }
       
       // Load and process the document
       console.log('Loading document...');
       const docLoaded = await loadSingleDocument(savedFilename);
+      console.log(`Document loaded with ${docLoaded.length} pages/sections`);
+      
+      // Verify we have content
+      if (docLoaded.length === 0) {
+        throw new Error('No content could be extracted from the document');
+      }
+      
+      // Check content quality
+      const totalContent = docLoaded.map(doc => doc.pageContent).join(' ').trim();
+      if (totalContent.length < 10) {
+        console.warn('Warning: Very little content extracted from document');
+      }
+      
+      console.log(`Extracted content preview: ${totalContent.substring(0, 200)}...`);
       
       console.log('Splitting document...');
       const docChunks = await splitDocuments(docLoaded);
+      console.log(`Document split into ${docChunks.length} chunks`);
       
       // Add to vector stores (individual and combined)
       console.log('Adding to vector stores...');
@@ -214,6 +252,8 @@ export function createApiServer(
       res.json({ 
         message: `Document ${savedFilename} successfully added to vector stores`,
         chunks: docChunks.length,
+        pages: docLoaded.length,
+        contentPreview: totalContent.substring(0, 150) + (totalContent.length > 150 ? '...' : ''),
         vectorStores: [
           savedFilename.replace(/\.[^/.]+$/, ""), // Individual store
           'combined' // Combined store

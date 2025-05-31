@@ -1,5 +1,6 @@
 import { DirectoryLoader } from 'langchain/document_loaders/fs/directory';
 import { TextLoader } from 'langchain/document_loaders/fs/text';
+import { PDFLoader } from 'langchain/document_loaders/fs/pdf';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import { Document } from "langchain/document";
 import * as fs from 'fs';
@@ -10,6 +11,7 @@ export async function loadDocuments() {
   console.log('Loading all documents...');
   const loader = new DirectoryLoader('./docs', {
     '.txt': (path) => new TextLoader(path),
+    '.pdf': (path) => new PDFLoader(path),
   });
   
   const docs = await loader.load();
@@ -26,9 +28,16 @@ export async function loadSingleDocument(filename: string): Promise<Document[]> 
   }
   
   console.log(`Loading document: ${filename}`);
-  const loader = new TextLoader(filepath);
+  
+  let loader;
+  if (filename.toLowerCase().endsWith('.pdf')) {
+    loader = new PDFLoader(filepath);
+  } else {
+    loader = new TextLoader(filepath);
+  }
+  
   const docs = await loader.load();
-  console.log(`Document loaded: ${filename}`);
+  console.log(`Document loaded: ${filename} (${docs.length} pages/sections)`);
   return docs;
 }
 
@@ -39,8 +48,9 @@ export async function saveUploadedDocument(fileContent: string, filename: string
     fs.mkdirSync('./docs', { recursive: true });
   }
   
-  // Ensure the filename has .txt extension
-  const sanitizedFilename = filename.endsWith('.txt') ? filename : `${filename}.txt`;
+  // For text content, ensure .txt extension
+  const sanitizedFilename = filename.endsWith('.txt') || filename.endsWith('.pdf') ? 
+    filename : `${filename}.txt`;
   const filepath = path.join('./docs', sanitizedFilename);
   
   // Write the file
@@ -57,7 +67,7 @@ export function listAvailableDocuments(): string[] {
   }
   
   return fs.readdirSync('./docs')
-    .filter(file => file.endsWith('.txt'));
+    .filter(file => file.endsWith('.txt') || file.endsWith('.pdf'));
 }
 
 // Split the documents into chunks

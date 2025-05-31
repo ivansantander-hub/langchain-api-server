@@ -41,6 +41,7 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
     React.useEffect(() => {
         // Mensaje de bienvenida cuando cambia el vector store
         if (selectedVectorStore) {
+            console.log(`Vector store cambiado a: ${selectedVectorStore}`);
             addSystemMessage(`Conectado a: ${getStoreDisplayName(selectedVectorStore)}`);
         }
     }, [selectedVectorStore]);
@@ -419,9 +420,13 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
         const inputElement = chatInputRef.current;
 
         try {
-            // Determinar el vector store a usar - priorizar el del chat seleccionado
-            const vectorStoreToUse = selectedChat?.vectorStore || selectedVectorStore;
+            // Usar el vector store seleccionado actualmente por el usuario (prioritario)
+            // Solo usar el del chat si no hay uno seleccionado explícitamente
+            const vectorStoreToUse = selectedVectorStore || selectedChat?.vectorStore || 'combined';
             const chatIdToUse = selectedChat?.id || sessionId;
+
+            console.log(`Enviando mensaje con vector store: ${vectorStoreToUse}`);
+            console.log(`selectedVectorStore: ${selectedVectorStore}, selectedChat?.vectorStore: ${selectedChat?.vectorStore}`);
 
             // Preparar opciones para la API incluyendo configuración del modelo
             const apiOptions = {
@@ -530,7 +535,10 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
                         Chat con Documentos
                     </h2>
                     <span className="chat-subtitle">
-                        Usuario: {selectedUser} | Chat: {selectedChat?.id?.slice(-8) || sessionId.slice(-8)} | Base: {getStoreDisplayName(selectedVectorStore)}
+                        Usuario: {selectedUser} | Chat: {selectedChat?.id?.slice(-8) || sessionId.slice(-8)} | 
+                        <span className="vector-store-info" style={{color: '#2563eb', fontWeight: 'bold'}}>
+                            Base: {getStoreDisplayName(selectedVectorStore)}
+                        </span>
                         {modelConfig && (
                             <span className="model-info">
                                 | Modelo: {modelConfig.modelName} (T: {modelConfig.temperature})
