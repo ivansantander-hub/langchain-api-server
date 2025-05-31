@@ -1,6 +1,6 @@
 import { loadDocuments, splitDocuments, loadSingleDocument, listAvailableDocuments } from './document.js';
 import { createEmbeddings, VectorStoreManager } from './vectorstore.js';
-import { createLanguageModel, createChatChain, formatChatHistory } from './model.js';
+import { createLanguageModel, createChatChain, formatChatHistory, ModelConfig, defaultModelConfig } from './model.js';
 import { startChatInterface } from './interface.js';
 import { createApiServer } from './api.js';
 import { HumanMessage, AIMessage } from '@langchain/core/messages';
@@ -105,25 +105,39 @@ export async function initializeChat() {
     chatHistoryManager,
     
     // Process a message in a specific context
-    async processMessage(message: string, userId: string = 'default', chatId: string = 'default', storeName: string = 'combined') {
+    async processMessage(message: string, userId: string = 'default', chatId: string = 'default', storeName: string = 'combined', modelConfig?: ModelConfig) {
       try {
         // Get appropriate retriever if specified
         let chain = this.chain;
+        let model = this.model;
+        
+        // If model configuration is provided, create a new model instance
+        if (modelConfig) {
+          model = createLanguageModel(modelConfig);
+        }
+        
         if (storeName !== 'combined') {
           const retriever = this.vectorStoreManager.getRetriever(storeName);
-          chain = createChatChain(this.model, retriever);
-        } else if (!chain) {
-          // If no default chain and requesting combined, try to create it
+          chain = createChatChain(model, retriever, modelConfig?.systemPrompt);
+        } else if (!chain || modelConfig) {
+          // If no default chain and requesting combined, or if custom config provided
           if (this.vectorStoreManager.storeExists('combined')) {
             const retriever = this.vectorStoreManager.getRetriever('combined');
-            chain = createChatChain(this.model, retriever);
+            chain = createChatChain(model, retriever, modelConfig?.systemPrompt);
+            // Only update default chain if no custom config
+            if (!modelConfig) {
+              this.chain = chain;
+            }
           } else {
             // Create combined store on demand if it doesn't exist
             console.log('Creating combined store on demand...');
             await this.vectorStoreManager.loadOrCreateVectorStore('combined');
             const retriever = this.vectorStoreManager.getRetriever('combined');
-            chain = createChatChain(this.model, retriever);
-            this.chain = chain; // Update default chain
+            chain = createChatChain(model, retriever, modelConfig?.systemPrompt);
+            // Only update default chain if no custom config
+            if (!modelConfig) {
+              this.chain = chain;
+            }
           }
         }
         

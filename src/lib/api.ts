@@ -4,8 +4,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { ChatOpenAI } from '@langchain/openai';
 import { VectorStoreManager } from './vectorstore.js';
-import { createChatChain } from './model.js';
+import { createChatChain, createLanguageModel, availableModels, defaultModelConfig, ModelConfig } from './model.js';
 import { saveUploadedDocument, loadSingleDocument, splitDocuments } from './document.js';
+import OpenAI from 'openai';
 
 // Get __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -21,6 +22,7 @@ interface ChatRequest {
   vectorStore?: string;
   userId?: string;
   chatId?: string;
+  modelConfig?: ModelConfig;
 }
 
 // Create Express app with support for multiple vector stores
@@ -75,12 +77,16 @@ export function createApiServer(
         '/api/health': 'GET - Health check for deployment platforms',
         '/api/chat': 'POST - Send a question to get an answer from the documents',
         '/api/vector-stores': 'GET - List all available vector stores',
+        '/api/models': 'GET - List available OpenAI models (cached)',
+        '/api/models/openai': 'GET - Get live models from OpenAI API',
+        '/api/config/model': 'GET - Get default model configuration',
         '/api/add-document': 'POST - Upload and add a document to vector stores',
         '/api/users': 'GET - List all users with chat history',
         '/api/users/:userId/vector-stores': 'GET - List all vector stores with chat history for a user',
         '/api/users/:userId/vector-stores/:vectorName/chats': 'GET - List all chats for a specific user and vector store',
         '/api/users/:userId/vector-stores/:vectorName/chats/:chatId': 'DELETE - Clear chat history for a specific context',
-        '/api/users/:userId/vector-stores/:vectorName/chats/:chatId/messages': 'GET - Get complete chat history messages for a specific context'
+        '/api/users/:userId/vector-stores/:vectorName/chats/:chatId/messages': 'GET - Get complete chat history messages for a specific context',
+        '/api/debug/vector-stores': 'GET - Debug information about vector stores'
       }
     });
   });
@@ -91,6 +97,63 @@ export function createApiServer(
     res.json({
       stores,
       default: 'combined'
+    });
+  });
+
+  // Endpoint to get available OpenAI models
+  app.get('/api/models', (req, res) => {
+    res.json({
+      models: availableModels,
+      default: defaultModelConfig.modelName
+    });
+  });
+
+  // Endpoint to get available models from OpenAI API
+  app.get('/api/models/openai', async (req, res) => {
+    try {
+      const openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+      });
+      
+      const models = await openai.models.list();
+      
+      // Filter for chat/completion models
+      const chatModels = models.data
+        .filter(model => 
+          model.id.includes('gpt') && 
+          !model.id.includes('instruct') &&
+          !model.id.includes('embedding')
+        )
+        .map(model => ({
+          id: model.id,
+          name: model.id,
+          description: `OpenAI model: ${model.id}`,
+          created: model.created
+        }))
+        .sort((a, b) => b.created - a.created);
+
+      res.json({
+        models: chatModels,
+        cached: availableModels,
+        total: chatModels.length
+      });
+    } catch (error) {
+      console.error('Error fetching OpenAI models:', error);
+      // Fallback to cached models
+      res.json({
+        models: availableModels,
+        cached: availableModels,
+        error: 'Failed to fetch live models from OpenAI',
+        total: availableModels.length
+      });
+    }
+  });
+
+  // Endpoint to get default model configuration
+  app.get('/api/config/model', (req, res) => {
+    res.json({
+      config: defaultModelConfig,
+      availableModels: availableModels
     });
   });
 
@@ -186,7 +249,7 @@ export function createApiServer(
   // Chat endpoint with vector store selection and user/chat context
   app.post('/api/chat', async (req: any, res: any) => {
     try {
-      const { question, vectorStore, userId, chatId } = req.body as ChatRequest;
+      const { question, vectorStore, userId, chatId, modelConfig } = req.body as ChatRequest;
       
       if (!question) {
         res.status(400).json({ error: 'Question is required' });
@@ -213,14 +276,14 @@ export function createApiServer(
 
       console.log(`Received question from User ${userIdToUse}, Chat ${chatIdToUse}, Store ${selectedStore}: ${question}`);
       
-      // Process the message using our chat manager with context
       console.log(`Using vector store: ${selectedStore}`);
       
       const response = await chatManager.processMessage(
         question, 
         userIdToUse, 
         chatIdToUse, 
-        selectedStore
+        selectedStore,
+        modelConfig
       );
       
       res.json({
@@ -237,6 +300,7 @@ export function createApiServer(
       
       console.log(`Response to User ${userIdToUse}, Chat ${chatIdToUse}, Store ${selectedStore}: ${response.text}`);
       console.log('==============================================');
+      
     } catch (error) {
       console.error('Error processing the query in api.ts:', error);
       res.status(500).json({ 

@@ -1,3 +1,79 @@
+// Función para parsear markdown básico a HTML
+const parseMarkdown = (text) => {
+    if (!text || typeof text !== 'string') return text;
+    
+    // Convertir markdown a HTML
+    let html = text
+        // Headers
+        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+        
+        // Bold
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/__(.*?)__/g, '<strong>$1</strong>')
+        
+        // Italic
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/_(.*?)_/g, '<em>$1</em>')
+        
+        // Code blocks (```code```)
+        .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+        
+        // Inline code (`code`)
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        
+        // Links [text](url) - before line breaks to avoid conflicts
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+        
+        // Line breaks - handle paragraphs first
+        .replace(/\n\n/g, '||PARAGRAPH||')
+        .replace(/\n/g, '<br>');
+    
+    // Handle lists after line break processing
+    const lines = html.split('||PARAGRAPH||');
+    html = lines.map(paragraph => {
+        // Check if paragraph contains list items
+        if (paragraph.includes('<br>* ') || paragraph.includes('<br>- ') || /\d+\. /.test(paragraph)) {
+            // Process list items
+            let processedParagraph = paragraph
+                .replace(/(^|<br>)\* (.*?)(?=<br>|$)/g, '$1<li>$2</li>')
+                .replace(/(^|<br>)- (.*?)(?=<br>|$)/g, '$1<li>$2</li>')
+                .replace(/(^|<br>)\d+\. (.*?)(?=<br>|$)/g, '$1<li>$2</li>');
+            
+            // Wrap consecutive list items in ul tags
+            processedParagraph = processedParagraph.replace(/(<li>.*?<\/li>(?:<br><li>.*?<\/li>)*)/g, '<ul>$1</ul>');
+            // Clean up br tags inside lists
+            processedParagraph = processedParagraph.replace(/<ul>(<li>.*?<\/li>)(<br><li>.*?<\/li>)*<\/ul>/g, (match, first, rest) => {
+                const cleanList = match.replace(/<br>(?=<li>)/g, '');
+                return cleanList;
+            });
+            
+            return processedParagraph;
+        }
+        return paragraph;
+    }).join('</p><p>');
+    
+    // Wrap content in paragraphs if it doesn't start with a block element
+    if (!html.match(/^<(h[1-6]|p|div|ul|ol|pre)/)) {
+        html = `<p>${html}</p>`;
+    }
+    
+    return html;
+};
+
+// Componente para renderizar contenido con markdown
+const MarkdownContent = ({ content }) => {
+    const parsedContent = parseMarkdown(content);
+    
+    return (
+        <div 
+            className="markdown-content"
+            dangerouslySetInnerHTML={{ __html: parsedContent }}
+        />
+    );
+};
+
 // Componente para renderizar mensajes individuales del chat
 const ChatMessage = ({ message, timestamp }) => {
     const { type, content, sources } = message;
@@ -45,7 +121,11 @@ const ChatMessage = ({ message, timestamp }) => {
         <div className={`message ${type}`}>
             <div className="message-content">
                 <div className="message-text">
-                    {content}
+                    {type === 'assistant' ? (
+                        <MarkdownContent content={content} />
+                    ) : (
+                        content
+                    )}
                 </div>
                 {renderSources()}
             </div>
@@ -111,4 +191,6 @@ const SystemMessage = ({ content }) => {
 window.ChatMessage = ChatMessage;
 window.TypingIndicator = TypingIndicator;
 window.ErrorMessage = ErrorMessage;
-window.SystemMessage = SystemMessage; 
+window.SystemMessage = SystemMessage;
+window.MarkdownContent = MarkdownContent;
+window.parseMarkdown = parseMarkdown; 

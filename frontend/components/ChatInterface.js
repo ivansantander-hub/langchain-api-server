@@ -5,14 +5,38 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
     const [isLoading, setIsLoading] = React.useState(false);
     const [sessionId] = React.useState(() => window.apiClient.constructor.generateId());
     const messagesEndRef = React.useRef(null);
+    const chatInputRef = React.useRef(null);
 
     // Estado para quick actions dinámicas
     const [quickActions, setQuickActions] = React.useState([]);
     const [isGeneratingActions, setIsGeneratingActions] = React.useState(false);
 
+    // Estado para configuración del modelo
+    const [modelConfig, setModelConfig] = React.useState(null);
+    const [modelConfigComponent, setModelConfigComponent] = React.useState(null);
+
     React.useEffect(() => {
         scrollToBottom();
     }, [messages]);
+
+    // Efecto para mantener el foco en el input
+    React.useEffect(() => {
+        const focusInput = () => {
+            if (chatInputRef.current && !isLoading) {
+                setTimeout(() => {
+                    chatInputRef.current.focus();
+                }, 100);
+            }
+        };
+
+        // Foco inicial
+        focusInput();
+
+        // Foco después de cargar
+        if (!isLoading) {
+            focusInput();
+        }
+    }, [isLoading, selectedUser, selectedChat]);
 
     React.useEffect(() => {
         // Mensaje de bienvenida cuando cambia el vector store
@@ -107,6 +131,35 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
 
         loadChatHistory();
     }, [selectedChat?.id, selectedUser]); // Observar el ID del chat y el usuario
+
+    // Inicializar configuración del modelo al cargar el componente
+    React.useEffect(() => {
+        const initModelConfig = async () => {
+            try {
+                // Cargar configuración guardada o usar por defecto
+                const saved = localStorage.getItem('modelConfig');
+                if (saved) {
+                    const savedConfig = JSON.parse(saved);
+                    setModelConfig(savedConfig);
+                } else {
+                    // Obtener configuración por defecto del servidor
+                    const response = await window.api.request('/api/config/model');
+                    setModelConfig(response.config);
+                }
+
+                // Inicializar componente de configuración
+                const configComponent = new window.ModelConfig();
+                configComponent.setOnConfigChange((newConfig) => {
+                    setModelConfig(newConfig);
+                });
+                setModelConfigComponent(configComponent);
+            } catch (error) {
+                console.error('Error initializing model config:', error);
+            }
+        };
+
+        initModelConfig();
+    }, []);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -338,9 +391,9 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
         ];
     };
 
-    const addMessage = (type, content, sources = null) => {
+    const addMessage = (type, content, sources = null, customId = null) => {
         const message = {
-            id: window.apiClient.constructor.generateId(),
+            id: customId || window.apiClient.constructor.generateId(),
             type,
             content,
             sources,
@@ -362,24 +415,32 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
         setInputValue('');
         setIsLoading(true);
 
+        // Mantener referencia al input para restaurar foco
+        const inputElement = chatInputRef.current;
+
         try {
             // Determinar el vector store a usar - priorizar el del chat seleccionado
             const vectorStoreToUse = selectedChat?.vectorStore || selectedVectorStore;
             const chatIdToUse = selectedChat?.id || sessionId;
 
-            // Enviar mensaje a la API
-            const response = await window.apiClient.sendMessage(messageText, {
+            // Preparar opciones para la API incluyendo configuración del modelo
+            const apiOptions = {
                 vectorStore: vectorStoreToUse,
                 userId: selectedUser,
                 chatId: chatIdToUse
-            });
+            };
 
-            // Agregar respuesta del asistente
+            // Incluir configuración del modelo si está disponible
+            if (modelConfig) {
+                apiOptions.modelConfig = modelConfig;
+            }
+
+            // Usar método de chat regular (sin streaming)
+            const response = await window.apiClient.sendMessage(messageText, apiOptions);
             addMessage('assistant', response.answer, response.sources);
 
-            // Si es un nuevo chat (no estaba en la lista), disparar evento para actualizar la lista
+            // Si es un nuevo chat, notificar al componente padre
             if (selectedChat && selectedChat.preview === 'Chat nuevo - Sin mensajes') {
-                // Notificar al componente padre que el chat ha sido usado
                 window.dispatchEvent(new CustomEvent('chatFirstMessage', {
                     detail: {
                         chatId: selectedChat.id,
@@ -395,6 +456,13 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
             addMessage('system', `Error: ${error.message}`);
         } finally {
             setIsLoading(false);
+            
+            // Restaurar foco al input después del envío
+            setTimeout(() => {
+                if (inputElement) {
+                    inputElement.focus();
+                }
+            }, 100);
         }
     };
 
@@ -413,6 +481,12 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
     const handleQuickAction = (action) => {
         if (!isLoading && isConnected) {
             sendMessage(action);
+            // Enfocar el input después de usar quick action
+            setTimeout(() => {
+                if (chatInputRef.current) {
+                    chatInputRef.current.focus();
+                }
+            }, 150);
         }
     };
 
@@ -457,10 +531,25 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
                     </h2>
                     <span className="chat-subtitle">
                         Usuario: {selectedUser} | Chat: {selectedChat?.id?.slice(-8) || sessionId.slice(-8)} | Base: {getStoreDisplayName(selectedVectorStore)}
+                        {modelConfig && (
+                            <span className="model-info">
+                                | Modelo: {modelConfig.modelName} (T: {modelConfig.temperature})
+                            </span>
+                        )}
                     </span>
                 </div>
                 
                 <div className="chat-actions">
+                    <button
+                        className="model-config-btn"
+                        onClick={() => modelConfigComponent?.show()}
+                        title="Configurar Modelo"
+                        disabled={isLoading}
+                    >
+                        <i className="fas fa-cog"></i>
+                        <span>Modelo</span>
+                    </button>
+                    
                     <button
                         className="action-button"
                         onClick={clearChat}
@@ -511,6 +600,7 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
             <div className="chat-input-container">
                 <form className="chat-input-form" onSubmit={handleSubmit}>
                     <textarea
+                        ref={chatInputRef}
                         className="chat-input"
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
@@ -531,6 +621,7 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
                             e.target.style.height = 'auto';
                             e.target.style.height = e.target.scrollHeight + 'px';
                         }}
+                        autoFocus
                     />
                     
                     <button 

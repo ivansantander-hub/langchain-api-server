@@ -48,17 +48,25 @@ class APIClient {
         const {
             vectorStore = 'combined',
             userId = this.defaultUserId,
-            chatId = this.defaultChatId
+            chatId = this.defaultChatId,
+            modelConfig = null
         } = options;
+
+        const requestBody = {
+            question: message,
+            vectorStore,
+            userId,
+            chatId
+        };
+
+        // Incluir configuración del modelo si está disponible
+        if (modelConfig) {
+            requestBody.modelConfig = modelConfig;
+        }
 
         return this.request('/api/chat', {
             method: 'POST',
-            body: JSON.stringify({
-                question: message,
-                vectorStore,
-                userId,
-                chatId
-            })
+            body: JSON.stringify(requestBody)
         });
     }
 
@@ -200,4 +208,7 @@ class APIClient {
 }
 
 // Crear instancia global del cliente API
-window.apiClient = new APIClient(); 
+window.apiClient = new APIClient();
+
+// Crear alias para compatibilidad
+window.api = window.apiClient; 
