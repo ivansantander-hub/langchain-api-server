@@ -55,11 +55,24 @@ export function createApiServer(
     res.sendFile(path.join(publicPath, 'index.html'));
   });
 
+  // Health check endpoint for Railway and other deployment platforms
+  app.get('/api/health', (req, res) => {
+    res.status(200).json({ 
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      version: process.version,
+      vectorStores: vectorStoreManager.getAvailableStores().length
+    });
+  });
+
   // API Info route
   app.get('/api', (req, res) => {
     res.json({ 
       message: 'LangChain Document Chat API', 
       endpoints: {
+        '/api/health': 'GET - Health check for deployment platforms',
         '/api/chat': 'POST - Send a question to get an answer from the documents',
         '/api/vector-stores': 'GET - List all available vector stores',
         '/api/add-document': 'POST - Upload and add a document to vector stores',

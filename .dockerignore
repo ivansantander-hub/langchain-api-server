@@ -2,22 +2,24 @@ node_modules
 npm-debug.log
 .git
 .gitignore
-README.md
 .env
+.env.local
+.env.production
 .nyc_output
 coverage
 .nyc_output
 .coverage
 .coverage.*
 .cache
-dist
 .tmp
 .temp
 frontend/node_modules
-docs
 docs-project
 vectorstores
 chat-histories
 .cursor
 *.log
-*.md 
+# Incluir README.md para documentación en producción
+# README.md
+# Incluir docs para que el sistema funcione
+# docs 
