@@ -1,6 +1,7 @@
 import { DirectoryLoader } from 'langchain/document_loaders/fs/directory';
 import { TextLoader } from 'langchain/document_loaders/fs/text';
-import { PDFLoader } from 'langchain/document_loaders/fs/pdf';
+// Temporary workaround: using dynamic import for PDFLoader to avoid TypeScript compilation issues
+// import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import { Document } from "langchain/document";
 import * as fs from 'fs';
@@ -9,6 +10,10 @@ import * as path from 'path';
 // Load all documents from the docs directory
 export async function loadDocuments() {
   console.log('Loading all documents...');
+  
+  // Dynamic import for PDFLoader to avoid compilation issues
+  const { PDFLoader } = await import('@langchain/community/document_loaders/fs/pdf');
+  
   const loader = new DirectoryLoader('./docs', {
     '.txt': (path) => new TextLoader(path),
     '.pdf': (path) => new PDFLoader(path),
@@ -31,6 +36,8 @@ export async function loadSingleDocument(filename: string): Promise<Document[]> 
   
   let loader;
   if (filename.toLowerCase().endsWith('.pdf')) {
+    // Dynamic import for PDFLoader to avoid compilation issues
+    const { PDFLoader } = await import('@langchain/community/document_loaders/fs/pdf');
     loader = new PDFLoader(filepath);
   } else {
     loader = new TextLoader(filepath);
