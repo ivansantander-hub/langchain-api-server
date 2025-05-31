@@ -36,7 +36,9 @@ export async function initializeChat() {
     console.log('Loading existing combined vector store...');
     await vectorStoreManager.loadOrCreateVectorStore('combined');
   } else {
-    console.log('No documents available and no existing combined store. Will create when documents are added.');
+    // Create empty combined store if no documents available
+    console.log('No documents available, creating empty combined vector store...');
+    await vectorStoreManager.loadOrCreateVectorStore('combined');
   }
   
   // Get existing vector stores (other than combined)
@@ -86,12 +88,13 @@ export async function initializeChat() {
   let defaultChain = null;
   
   try {
-    if (vectorStoreManager.storeExists('combined')) {
-      defaultRetriever = vectorStoreManager.getRetriever('combined');
-      defaultChain = createChatChain(model, defaultRetriever);
-    }
+    // Since we now always create the combined store, we should always have it
+    defaultRetriever = vectorStoreManager.getRetriever('combined');
+    defaultChain = createChatChain(model, defaultRetriever);
+    console.log('Default chain created with combined vector store');
   } catch (error) {
-    console.log('Combined store not available yet, will create when needed');
+    console.error('Error creating default chain with combined store:', error);
+    // This shouldn't happen anymore since we always create combined store
   }
   
   // Create a manager function to handle chat state
@@ -115,7 +118,12 @@ export async function initializeChat() {
             const retriever = this.vectorStoreManager.getRetriever('combined');
             chain = createChatChain(this.model, retriever);
           } else {
-            throw new Error('No vector stores available. Please upload documents first.');
+            // Create combined store on demand if it doesn't exist
+            console.log('Creating combined store on demand...');
+            await this.vectorStoreManager.loadOrCreateVectorStore('combined');
+            const retriever = this.vectorStoreManager.getRetriever('combined');
+            chain = createChatChain(this.model, retriever);
+            this.chain = chain; // Update default chain
           }
         }
         

@@ -94,6 +94,24 @@ export function createApiServer(
     });
   });
 
+  // Debug endpoint to check vector store status
+  app.get('/api/debug/vector-stores', (req, res) => {
+    const stores = vectorStoreManager.getAvailableStores();
+    const storeStatus = stores.map(store => ({
+      name: store,
+      exists: vectorStoreManager.storeExists(store),
+      loaded: vectorStoreManager.isStoreLoaded(store)
+    }));
+    
+    res.json({
+      baseDirectory: './vectorstores',
+      totalStores: stores.length,
+      stores: storeStatus,
+      combinedExists: vectorStoreManager.storeExists('combined'),
+      message: stores.length === 0 ? 'No vector stores found. Upload documents to create them.' : 'Vector stores available'
+    });
+  });
+
   // Endpoint to add a document to vector stores
   app.post('/api/add-document', async (req: any, res: any) => {
     let savedFilename: string | null = null;
@@ -177,9 +195,14 @@ export function createApiServer(
 
       // Validate if provided vectorStore exists
       if (vectorStore && !vectorStoreManager.storeExists(vectorStore)) {
+        const availableStores = vectorStoreManager.getAvailableStores();
+        console.log(`Vector store "${vectorStore}" not found. Available stores:`, availableStores);
         return res.status(404).json({ 
           error: `Vector store "${vectorStore}" not found`,
-          available: vectorStoreManager.getAvailableStores()
+          available: availableStores,
+          message: availableStores.length > 0 ? 
+            `Available stores: ${availableStores.join(', ')}` : 
+            'No vector stores available. Upload documents to create them.'
         });
       }
 

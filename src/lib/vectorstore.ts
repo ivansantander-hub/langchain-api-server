@@ -43,6 +43,20 @@ export class VectorStoreManager {
       this.vectorStores.set(name, store);
       return store;
     } catch (error) {
+      // For 'combined' store, create an empty one if no documents provided
+      if (name === 'combined' && !docs) {
+        console.log(`Creating empty combined vector store...`);
+        // Create a dummy document to initialize the vector store
+        const dummyDoc = new Document({
+          pageContent: "This is a placeholder document. Upload documents to start chatting.",
+          metadata: { source: "system", type: "placeholder" }
+        });
+        const store = await HNSWLib.fromDocuments([dummyDoc], this.embeddings);
+        await store.save(storePath);
+        this.vectorStores.set(name, store);
+        return store;
+      }
+      
       // If loading fails or no documents provided, throw error
       if (!docs) {
         throw new Error(`Vector store ${name} does not exist and no documents provided to create it.`);
@@ -143,6 +157,11 @@ export class VectorStoreManager {
     return this.vectorStores.has(name) || 
            (fs.existsSync(path.join(this.baseDir, name)) && 
             fs.statSync(path.join(this.baseDir, name)).isDirectory());
+  }
+  
+  // Check if a store is loaded in memory
+  isStoreLoaded(name: string): boolean {
+    return this.vectorStores.has(name);
   }
 }
 
