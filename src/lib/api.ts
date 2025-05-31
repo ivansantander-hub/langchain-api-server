@@ -36,8 +36,8 @@ export function createApiServer(
   app.use(cors());
   app.use(express.json({ limit: '10mb' }));
 
-  // Serve static files from the root directory
-  const publicPath = path.join(__dirname, '../..');
+  // Serve static files from the frontend directory
+  const publicPath = path.join(__dirname, '../../frontend');
   app.use(express.static(publicPath));
 
   // API Routes prefix

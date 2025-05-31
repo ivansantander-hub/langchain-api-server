@@ -48,11 +48,11 @@ Esta aplicación utiliza LangChain para crear un sistema de chat que responde pr
   - `api.ts`: Servidor REST API con middleware de archivos estáticos
   - `interface.ts`: Interfaz de línea de comandos
 
-- **Cliente web integrado**:
+- **Cliente web integrado** (carpeta `frontend/`):
   - React 18 via CDN (sin build tools)
   - CSS moderno con variables y responsive design
   - JavaScript ES6+ con Fetch API
-  - Componentes modulares reutilizables
+  - Componentes modulares reutilizables organizados
 
 - **Tecnologías**:
   - TypeScript con Node.js para el backend
@@ -163,11 +163,17 @@ proyecto/
 ├── vectorstores/          # Base de datos vectorial FAISS (generada automáticamente)
 │   ├── combined/          # Almacén con todos los documentos
 │   └── [documentos]/      # Almacenes individuales para cada documento
-├── components/            # Componentes React del cliente web
-│   ├── ChatMessage.js     # Componente para mensajes individuales
-│   ├── ChatInterface.js   # Interfaz principal de chat
-│   ├── DocumentManager.js # Gestión de subida de documentos
-│   └── VectorStoreSelector.js # Selector de bases de conocimiento
+├── frontend/              # Cliente web completo
+│   ├── components/        # Componentes React del cliente web
+│   │   ├── ChatMessage.js # Componente para mensajes individuales
+│   │   ├── ChatInterface.js # Interfaz principal de chat
+│   │   ├── DocumentManager.js # Gestión de subida de documentos
+│   │   └── VectorStoreSelector.js # Selector de bases de conocimiento
+│   ├── index.html         # Cliente web principal
+│   ├── styles.css         # Estilos del cliente web
+│   ├── api.js            # Cliente API JavaScript
+│   └── app.js            # Aplicación React principal
+├── backend/               # Código del servidor (carpeta existente)
 ├── src/                   # Código fuente de la aplicación
 │   ├── lib/               # Módulos principales
 │   │   ├── document.ts    # Gestión de documentos
@@ -178,12 +184,7 @@ proyecto/
 │   │   └── interface.ts   # Interfaz de línea de comandos
 │   ├── index.ts           # Punto de entrada para la API
 │   └── cli.ts             # Punto de entrada para la CLI
-├── index.html             # Cliente web principal
-├── styles.css             # Estilos del cliente web
-├── api.js                 # Cliente API JavaScript
-├── app.js                 # Aplicación React principal
 ├── Procfile               # Configuración para Railway
-├── railway.env.example    # Variables de entorno para Railway
 ├── package.json           # Dependencias y scripts
 ├── tsconfig.json          # Configuración de TypeScript
 └── .env                   # Variables de entorno (API keys)
