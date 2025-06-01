@@ -1,12 +1,21 @@
-import { loadDocuments, splitDocuments, loadSingleDocument, listAvailableDocuments, splitDocumentsSemanticAware } from './document.js';
+import { loadDocuments, splitDocuments, loadSingleDocument, listAvailableDocuments } from './document.js';
 import { createEmbeddings, VectorStoreManager } from './vectorstore.js';
-import { createLanguageModel, createChatChain, formatChatHistory, ModelConfig, defaultModelConfig, conservativeModelConfig } from './model.js';
+import { createLanguageModel, createChatChain, formatChatHistory, ModelConfig, conservativeModelConfig, ChainInput } from './model.js';
 import { startChatInterface } from './interface.js';
-import { createApiServer } from './api.js';
+import { ChatManager, createApiServer } from './api.js';
 import { ChatHistoryManager } from './chatHistory.js';
+import { ChatOpenAI } from '@langchain/openai';
+import { AIMessageChunk } from '@langchain/core/messages';
+import { RunnableSequence } from '@langchain/core/runnables';
+
+interface ChatManagerInitialize extends ChatManager {
+  vectorStoreManager: VectorStoreManager;
+  model: ChatOpenAI;
+  chain: RunnableSequence<ChainInput, AIMessageChunk> | null;
+}
 
 // Main initialization function for the chat system with multiple vector stores
-export async function initializeChat() {
+export async function initializeChat(): Promise<ChatManagerInitialize> {
   console.log('Initializing chat application with documents...');
   
   // Create embeddings and vector store manager
@@ -25,7 +34,6 @@ export async function initializeChat() {
   
   // Create or load combined vector store
   if (!combinedStoreExists && documentNames.length > 0) {
-    // If combined store doesn't exist, create it with all documents
     console.log('Creating combined vector store from all documents...');
     const docs = await loadDocuments();
     const splitDocs = await splitDocuments(docs);
@@ -34,7 +42,6 @@ export async function initializeChat() {
     console.log('Loading existing combined vector store...');
     await vectorStoreManager.loadOrCreateVectorStore('combined');
   } else {
-    // Create empty combined store if no documents available
     console.log('No documents available, creating empty combined vector store...');
     await vectorStoreManager.loadOrCreateVectorStore('combined');
   }
@@ -95,7 +102,7 @@ export async function initializeChat() {
   }
   
   // Create a manager function to handle chat state
-  const chatManager = {
+  const chatManager: ChatManagerInitialize = {
     chain: defaultChain,
     model,
     vectorStoreManager,
@@ -150,7 +157,7 @@ export async function initializeChat() {
         // Return the response in expected format
         return {
           text: responseText,
-          sourceDocuments: [], // No source documents in the new implementation
+          sourceDocuments: [],
         };
       } catch (error) {
         console.error("Error in processMessage:", error);

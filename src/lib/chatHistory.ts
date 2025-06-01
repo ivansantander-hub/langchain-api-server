@@ -21,13 +21,7 @@ export class ChatHistoryManager {
       fs.mkdirSync(this.baseDir, { recursive: true });
     }
     
-    // Load existing chat histories
     this.loadAllHistories();
-  }
-  
-  // Get a unique key for a chat history
-  private getHistoryKey(userId: string, vectorName: string, chatId: string): string {
-    return `${userId}-${vectorName}-${chatId}`;
   }
   
   // Get chat history for a specific user, vector store and chat

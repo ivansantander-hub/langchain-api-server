@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response, RequestHandler } from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -6,27 +6,28 @@ import { VectorStoreManager } from './vectorstore.js';
 import { availableModels, defaultModelConfig, ModelConfig } from './model.js';
 import { saveUploadedDocument, loadSingleDocument, splitDocuments } from './document.js';
 import OpenAI from 'openai';
+import { ChatHistoryManager } from './chatHistory.js';
 
 // Get __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-interface AddDocumentRequest {
-  filename: string;
-  content: string;
+export interface Document {
+  pageContent: string;
+  metadata: Record<string, string>;
 }
 
-interface ChatRequest {
-  question: string;
-  vectorStore?: string;
-  userId?: string;
-  chatId?: string;
-  modelConfig?: ModelConfig;
+export interface ChatManager {
+  processMessage: (question: string, userId: string, chatId: string, vectorStore: string, modelConfig?: ModelConfig) => Promise<{ text: string; sourceDocuments: Document[] }>;
+  getUsers: () => string[];
+  getUserVectorStores: (userId: string) => string[];
+  getUserVectorChats: (userId: string, vectorName: string) => string[];
+  clearChatHistory: (userId: string, vectorName: string, chatId: string) => void;
+  chatHistoryManager: ChatHistoryManager;
 }
 
 // Create Express app with support for multiple vector stores
 export function createApiServer(
-  chatManager: any,
+  chatManager: ChatManager,
   vectorStoreManager: VectorStoreManager
 ) {
   const app = express();
@@ -34,7 +35,7 @@ export function createApiServer(
 
   // Middleware
   app.use(cors());
-  app.use(express.json({ limit: '50mb' })); // Increase limit for large files
+  app.use(express.json({ limit: '50mb' }));
   
   // Add timeout middleware for file uploads
   app.use('/api/add-document', (req, res, next) => {
@@ -47,16 +48,15 @@ export function createApiServer(
   const publicPath = path.join(__dirname, '../../frontend');
   app.use(express.static(publicPath));
 
-  // API Routes prefix
-  app.use('/api', express.Router());
+  // API Routes
 
   // Home route - serve the web client
-  app.get('/', (req, res) => {
+  app.get('/', (_: Request, res: Response) => {
     res.sendFile(path.join(publicPath, 'index.html'));
   });
 
   // Health check endpoint for Railway and other deployment platforms
-  app.get('/api/health', (req, res) => {
+  app.get('/api/health', (_: Request, res: Response) => {
     res.status(200).json({ 
       status: 'healthy',
       timestamp: new Date().toISOString(),
@@ -68,7 +68,7 @@ export function createApiServer(
   });
 
   // API Info route
-  app.get('/api', (req, res) => {
+  app.get('/api', (_: Request, res: Response) => {
     res.json({ 
       message: 'LangChain Document Chat API', 
       endpoints: {
@@ -90,7 +90,7 @@ export function createApiServer(
   });
 
   // Endpoint to list all available vector stores
-  app.get('/api/vector-stores', (req, res) => {
+  app.get('/api/vector-stores', (_: Request, res: Response) => {
     const stores = vectorStoreManager.getAvailableStores();
     res.json({
       stores,
@@ -99,7 +99,7 @@ export function createApiServer(
   });
 
   // Endpoint to get available OpenAI models
-  app.get('/api/models', (req, res) => {
+  app.get('/api/models', (_: Request, res: Response) => {
     res.json({
       models: availableModels,
       default: defaultModelConfig.modelName
@@ -107,7 +107,7 @@ export function createApiServer(
   });
 
   // Endpoint to get available models from OpenAI API
-  app.get('/api/models/openai', async (req, res) => {
+  app.get('/api/models/openai', async (_: Request, res: Response) => {
     try {
       const openai = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY,
@@ -148,7 +148,7 @@ export function createApiServer(
   });
 
   // Endpoint to get default model configuration
-  app.get('/api/config/model', (req, res) => {
+  app.get('/api/config/model', (_: Request, res: Response) => {
     res.json({
       config: defaultModelConfig,
       availableModels: availableModels
@@ -156,7 +156,7 @@ export function createApiServer(
   });
 
   // Debug endpoint to check vector store status
-  app.get('/api/debug/vector-stores', (req, res) => {
+  app.get('/api/debug/vector-stores', (_: Request, res: Response) => {
     const stores = vectorStoreManager.getAvailableStores();
     const storeStatus = stores.map(store => ({
       name: store,
@@ -174,11 +174,11 @@ export function createApiServer(
   });
 
   // Endpoint to add a document to vector stores
-  app.post('/api/add-document', async (req: any, res: any) => {
+  app.post('/api/add-document', (async (req: Request, res: Response) => {
     let savedFilename: string | null = null;
     
     try {
-      const { filename, content } = req.body as AddDocumentRequest;
+      const { filename, content } = req.body;
       
       if (!filename || !content) {
         return res.status(400).json({ error: 'filename and content are required' });
@@ -221,6 +221,9 @@ export function createApiServer(
       
       // Load and process the document
       console.log('Loading document...');
+      if (!savedFilename) {
+        throw new Error('Failed to save document');
+      }
       const docLoaded = await loadSingleDocument(savedFilename);
       console.log(`Document loaded with ${docLoaded.length} pages/sections`);
       
@@ -282,12 +285,12 @@ export function createApiServer(
         filename: savedFilename
       });
     }
-  });
+  }) as express.RequestHandler);
 
   // Chat endpoint with vector store selection and user/chat context
-  app.post('/api/chat', async (req: any, res: any) => {
+  app.post('/api/chat', (async (req: Request, res: Response) => {
     try {
-      const { question, vectorStore, userId, chatId, modelConfig } = req.body as ChatRequest;
+      const { question, vectorStore, userId, chatId, modelConfig } = req.body;
       
       if (!question) {
         res.status(400).json({ error: 'Question is required' });
@@ -327,7 +330,7 @@ export function createApiServer(
       res.json({
         answer: response.text,
         sources: response.sourceDocuments ? 
-          response.sourceDocuments.map((doc: any) => ({
+          response.sourceDocuments.map((doc: Document) => ({
             content: doc.pageContent,
             metadata: doc.metadata
           })) : [],
@@ -346,30 +349,30 @@ export function createApiServer(
         message: error instanceof Error ? error.message : 'Unknown error' 
       });
     }
-  });
+  }) as express.RequestHandler);
 
   // Endpoint to list all users
-  app.get('/api/users', (req, res) => {
+  app.get('/api/users', (_: Request, res: Response) => {
     const users = chatManager.getUsers();
     res.json({ users });
   });
 
   // Endpoint to list all vector stores for a user
-  app.get('/api/users/:userId/vector-stores', (req, res) => {
+  app.get('/api/users/:userId/vector-stores', (req: Request, res: Response) => {
     const { userId } = req.params;
     const vectorStores = chatManager.getUserVectorStores(userId);
     res.json({ userId, vectorStores });
   });
 
   // Endpoint to list all chats for a user and vector store
-  app.get('/api/users/:userId/vector-stores/:vectorName/chats', (req, res) => {
+  app.get('/api/users/:userId/vector-stores/:vectorName/chats', (req: Request, res: Response) => {
     const { userId, vectorName } = req.params;
     const chats = chatManager.getUserVectorChats(userId, vectorName);
     res.json({ userId, vectorName, chats });
   });
 
   // Endpoint to clear chat history
-  app.delete('/api/users/:userId/vector-stores/:vectorName/chats/:chatId', (req, res) => {
+  app.delete('/api/users/:userId/vector-stores/:vectorName/chats/:chatId', (req: Request, res: Response) => {
     const { userId, vectorName, chatId } = req.params;
     chatManager.clearChatHistory(userId, vectorName, chatId);
     res.json({ 
@@ -381,7 +384,7 @@ export function createApiServer(
   });
 
   // Endpoint to get complete chat history messages
-  app.get('/api/users/:userId/vector-stores/:vectorName/chats/:chatId/messages', (req, res) => {
+  app.get('/api/users/:userId/vector-stores/:vectorName/chats/:chatId/messages', (req: Request, res: Response) => {
     const { userId, vectorName, chatId } = req.params;
     const chatHistory = chatManager.chatHistoryManager.getChatHistory(userId, vectorName, chatId);
     
@@ -393,7 +396,7 @@ export function createApiServer(
         id: index,
         question: exchange[0],
         answer: exchange[1],
-        timestamp: new Date().toISOString() // Note: actual timestamps are not stored in the current implementation
+        timestamp: new Date().toISOString()
       }))
     });
   });
@@ -402,12 +405,10 @@ export function createApiServer(
   process.on('uncaughtException', (error) => {
     console.error('Uncaught Exception:', error);
     console.error('Stack:', error.stack);
-    // Don't exit the process, just log the error
   });
 
   process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-    // Don't exit the process, just log the error
   });
 
   // Function to start the server

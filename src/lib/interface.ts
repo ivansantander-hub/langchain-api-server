@@ -1,10 +1,11 @@
 import * as readline from 'readline';
 import { VectorStoreManager } from './vectorstore.js';
+import { ChatManager, Document } from './api.js';
 
 // Chat interface with vector store selection and user/chat context
 export function startChatInterface(
   vectorStoreManager: VectorStoreManager,
-  chatManager: any
+  chatManager: ChatManager
 ) {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -134,7 +135,7 @@ export function startChatInterface(
         // Display source documents if available
         if (response.sourceDocuments && response.sourceDocuments.length > 0) {
           console.log('\nSources:');
-          response.sourceDocuments.slice(0, 3).forEach((doc: any, i: number) => {
+          response.sourceDocuments.slice(0, 3).forEach((doc: Document, i: number) => {
             console.log(`\nSource ${i + 1}:`);
             console.log(`${doc.pageContent.substring(0, 150)}...`);
             if (doc.metadata && doc.metadata.source) {

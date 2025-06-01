@@ -81,22 +81,22 @@ export function listAvailableDocuments(): string[] {
 export async function splitDocuments(docs: Document[]) {
   console.log('Splitting documents with improved chunking...');
   const textSplitter = new RecursiveCharacterTextSplitter({
-    chunkSize: 800, // Chunks más pequeños para mayor precisión
-    chunkOverlap: 150, // Overlap reducido pero suficiente
-    separators: ["\n\n", "\n", ". ", "! ", "? ", " ", ""], // Separadores más inteligentes
+    chunkSize: 800, // Chunks more smaller for better precision
+    chunkOverlap: 150, // Reduced overlap but enough
+    separators: ["\n\n", "\n", ". ", "! ", "? ", " ", ""], // More intelligent separators
     keepSeparator: true,
   });
   
   const splitDocs = await textSplitter.splitDocuments(docs);
   
-  // Post-procesar chunks para mejorar calidad
+  // Post-process chunks to improve quality
   const improvedChunks = splitDocs
-    .filter(doc => doc.pageContent.trim().length > 50) // Filtrar chunks muy pequeños
+    .filter(doc => doc.pageContent.trim().length > 50) // Filter very small chunks
     .map(doc => {
-      // Limpiar y normalizar el contenido
+      // Clean and normalize the content
       const cleanContent = doc.pageContent
-        .replace(/\s+/g, ' ') // Normalizar espacios
-        .replace(/\n{3,}/g, '\n\n') // Normalizar saltos de línea
+        .replace(/\s+/g, ' ') // Normalize spaces
+        .replace(/\n{3,}/g, '\n\n') // Normalize line breaks
         .trim();
       
       return new Document({

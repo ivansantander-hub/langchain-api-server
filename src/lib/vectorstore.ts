@@ -1,8 +1,25 @@
 import { OpenAIEmbeddings } from '@langchain/openai';
 import { HNSWLib } from '@langchain/community/vectorstores/hnswlib';
 import { Document } from "langchain/document";
+import { VectorStoreRetriever } from '@langchain/core/vectorstores';
 import * as fs from 'fs';
 import * as path from 'path';
+
+// Interface for search results with scores
+export interface SearchResult {
+  doc: Document;
+  score: number;
+}
+
+// Interface for retriever configuration
+export interface RetrieverConfig {
+  k: number;
+  searchType: 'similarity' | 'mmr';
+  searchKwargs?: {
+    fetchK?: number;
+    lambda?: number;
+  };
+}
 
 // Create embeddings
 export function createEmbeddings() {
@@ -144,13 +161,15 @@ export class VectorStoreManager {
   }
   
   // Get a retriever for a specific vector store with improved search parameters
-  getRetriever(storeName: string, k: number = 10, searchType: 'similarity' | 'mmr' = 'mmr') {
+  getRetriever(storeName: string, k: number = 10, searchType: 'similarity' | 'mmr' = 'mmr'): VectorStoreRetriever<HNSWLib> {
     if (!this.vectorStores.has(storeName)) {
       throw new Error(`Vector store ${storeName} not found. Load it first.`);
     }
     
+    const store = this.vectorStores.get(storeName)!;
+    
     if (searchType === 'mmr') {
-      return this.vectorStores.get(storeName)!.asRetriever({
+      return store.asRetriever({
         k: Math.min(k, 20),
         searchType: 'mmr',
         searchKwargs: {
@@ -159,7 +178,7 @@ export class VectorStoreManager {
         },
       });
     } else {
-      return this.vectorStores.get(storeName)!.asRetriever({
+      return store.asRetriever({
         k: Math.min(k, 20),
         searchType: 'similarity',
       });
@@ -167,7 +186,7 @@ export class VectorStoreManager {
   }
   
   // Advanced retriever with multiple search strategies and reranking
-  getAdvancedRetriever(storeName: string, k: number = 8) {
+  getAdvancedRetriever(storeName: string, k: number = 8): { getRelevantDocuments: (query: string) => Promise<Document[]> } {
     if (!this.vectorStores.has(storeName)) {
       throw new Error(`Vector store ${storeName} not found. Load it first.`);
     }
@@ -176,21 +195,21 @@ export class VectorStoreManager {
     
     // Return a custom retriever that combines multiple strategies
     return {
-      getRelevantDocuments: async (query: string) => {
+      getRelevantDocuments: async (query: string): Promise<Document[]> => {
         try {
           // 1. Get similarity-based results with scores
           const similarityResults = await store.similaritySearchWithScore(query, k * 2);
 
           // 2. Filter results by score threshold and deduplicate
-          const filteredResults = similarityResults
-            .filter(([doc, score]) => score >= 0.6)
-            .map(([doc, score]) => ({ doc, score }))
-            .sort((a, b) => b.score - a.score)
+          const filteredResults: SearchResult[] = similarityResults
+            .filter(([doc, score]: [Document, number]) => score >= 0.6)
+            .map(([doc, score]: [Document, number]): SearchResult => ({ doc, score }))
+            .sort((a: SearchResult, b: SearchResult) => b.score - a.score)
             .slice(0, k);
 
           console.log(`Advanced retriever: Found ${filteredResults.length} relevant documents (score >= 0.6) for query: "${query.substring(0, 50)}..."`);
           
-          return filteredResults.map(result => result.doc);
+          return filteredResults.map((result: SearchResult) => result.doc);
         } catch (error) {
           console.error('Error in advanced retriever:', error);
           // Fallback to basic similarity search
@@ -242,7 +261,7 @@ export async function loadVectorStore(
 }
 
 // Legacy function for backward compatibility
-export function createRetriever(vectorStore: HNSWLib) {
+export function createRetriever(vectorStore: HNSWLib): VectorStoreRetriever<HNSWLib> {
   return vectorStore.asRetriever({
     k: 5,
     searchType: 'similarity',

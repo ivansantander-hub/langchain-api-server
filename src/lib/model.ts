@@ -4,6 +4,17 @@ import { ChatOpenAI } from '@langchain/openai';
 import { RunnableSequence } from '@langchain/core/runnables';
 import { Document } from '@langchain/core/documents';
 
+// Interface for retriever objects (compatible with LangChain retrievers)
+export interface Retriever {
+  getRelevantDocuments(query: string): Promise<Document[]>;
+}
+
+// Interface for chain input
+export interface ChainInput {
+  input: string;
+  chat_history?: (HumanMessage | AIMessage)[];
+}
+
 // Configuration interface for the model
 export interface ModelConfig {
   modelName: string;
@@ -76,7 +87,7 @@ export function createLanguageModel(config: ModelConfig = defaultModelConfig): C
 }
 
 // Create chat chain with conversation history management and configurable prompt
-export function createChatChain(model: ChatOpenAI, retriever: any, systemPrompt: string = defaultModelConfig.systemPrompt) {
+export function createChatChain(model: ChatOpenAI, retriever: Retriever, systemPrompt: string = defaultModelConfig.systemPrompt) {
   // Create prompt template with chat history
   const prompt = ChatPromptTemplate.fromMessages([
     ["system", systemPrompt],
@@ -87,13 +98,13 @@ export function createChatChain(model: ChatOpenAI, retriever: any, systemPrompt:
   // Define the RAG pipeline
   const chain = RunnableSequence.from([
     {
-      context: async (input: any) => {
+      context: async (input: ChainInput) => {
         const query = typeof input.input === 'string' ? input.input : String(input.input);
         const docs = await retriever.getRelevantDocuments(query);
         return docs.map((doc: Document) => doc.pageContent).join("\n\n");
       },
-      input: (input: any) => input.input,
-      chat_history: (input: any) => input.chat_history || [],
+      input: (input: ChainInput) => input.input,
+      chat_history: (input: ChainInput) => input.chat_history || [],
     },
     prompt,
     model,
