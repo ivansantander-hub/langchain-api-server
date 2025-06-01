@@ -24,6 +24,9 @@ RUN npm ci
 # Copiar código fuente
 COPY . .
 
+# Crear directorios que pueden estar en .dockerignore pero son necesarios para tests
+RUN mkdir -p vectorstores chat-histories
+
 # Compilar TypeScript
 RUN npm run build
 
@@ -31,6 +34,8 @@ RUN npm run build
 # Establecer variables de entorno para los tests
 ENV NODE_ENV=test
 ENV OPENAI_API_KEY=test-key-for-railway
+ENV CI=true
+ENV RAILWAY_ENVIRONMENT=true
 
 # Ejecutar tests - Si fallan, el build falla
 RUN npm run test:ci

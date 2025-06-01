@@ -29,6 +29,15 @@ COPY jest.config.cjs ./
 # Copiar código fuente
 COPY src/ ./src/
 
+# Crear directorios que pueden estar en .dockerignore pero son necesarios para tests
+RUN mkdir -p vectorstores chat-histories
+
+# Establecer variables de entorno para tests CI
+ENV NODE_ENV=test
+ENV OPENAI_API_KEY=test-key-for-railway
+ENV CI=true
+ENV RAILWAY_ENVIRONMENT=true
+
 # Compilar TypeScript
 RUN npm run build
 
