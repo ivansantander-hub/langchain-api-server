@@ -4,3 +4,4 @@ dist/
 vectorstore/
 .DS_Store
 *.log 
+coverage/

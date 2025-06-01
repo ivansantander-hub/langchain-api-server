@@ -1,0 +1,36 @@
+# Dockerfile específico para ejecutar tests en Railway
+FROM node:18-alpine
+
+# Instalar herramientas de compilación necesarias para las dependencias
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    linux-headers \
+    libc6-compat
+
+# Establecer Python3 como python por defecto
+RUN ln -sf python3 /usr/bin/python
+
+# Establecer directorio de trabajo
+WORKDIR /app
+
+# Copiar archivos de configuración de dependencias
+COPY package*.json ./
+COPY yarn.lock* ./
+
+# Instalar todas las dependencias (incluyendo devDependencies para tests)
+RUN npm ci
+
+# Copiar archivos de configuración de TypeScript y Jest
+COPY tsconfig.json ./
+COPY jest.config.cjs ./
+
+# Copiar código fuente
+COPY src/ ./src/
+
+# Compilar TypeScript
+RUN npm run build
+
+# Ejecutar tests
+CMD ["npm", "run", "test:ci"] 

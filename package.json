@@ -15,8 +15,10 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:e2e": "jest --testPathPattern=e2e",
+    "test:ci": "jest --ci --coverage --silent --reporters=default",
     "railway:build": "npm run build",
-    "railway:start": "npm start"
+    "railway:start": "npm start",
+    "railway:test": "npm run build && npm run test:ci"
   },
   "keywords": [],
   "author": "",

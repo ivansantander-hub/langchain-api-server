@@ -27,6 +27,14 @@ COPY . .
 # Compilar TypeScript
 RUN npm run build
 
+# ⚡ EJECUTAR TESTS DURANTE EL BUILD ⚡
+# Establecer variables de entorno para los tests
+ENV NODE_ENV=test
+ENV OPENAI_API_KEY=test-key-for-railway
+
+# Ejecutar tests - Si fallan, el build falla
+RUN npm run test:ci
+
 # Instalar solo dependencias de producción en directorio limpio
 RUN mkdir /app-prod && cp package*.json /app-prod/
 WORKDIR /app-prod
