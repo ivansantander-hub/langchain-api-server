@@ -3,7 +3,6 @@ const path = require('path');
 
 describe('Application E2E Tests', () => {
   beforeAll(async () => {
-    // Set test environment variables
     process.env.OPENAI_API_KEY = 'test-key-for-e2e';
     process.env.NODE_ENV = 'test';
   });
@@ -142,12 +141,6 @@ describe('Application E2E Tests', () => {
   });
 
   describe('Application Smoke Tests', () => {
-    it('should handle missing environment variables gracefully', () => {
-      // This test is commented out because it's hard to test with require() in ES modules
-      // The actual functionality is tested in the unit tests using child processes
-      expect(true).toBe(true);
-    });
-
     it('should load configuration files', () => {
       // Test that dotenv is called
       const fs = require('fs');

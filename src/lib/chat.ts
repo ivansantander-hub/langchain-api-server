@@ -8,7 +8,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { AIMessageChunk } from '@langchain/core/messages';
 import { RunnableSequence } from '@langchain/core/runnables';
 
-interface ChatManagerInitialize extends ChatManager {
+export interface ChatManagerInitialize extends ChatManager {
   vectorStoreManager: VectorStoreManager;
   model: ChatOpenAI;
   chain: RunnableSequence<ChainInput, AIMessageChunk> | null;
