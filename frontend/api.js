@@ -1,13 +1,12 @@
 // API Client para LangChain Document Chat
 class APIClient {
-    constructor(baseURL = '') {
-        // Si no se proporciona baseURL, usar URL relativa (mismo dominio y puerto)
-        this.baseURL = baseURL || (typeof window !== 'undefined' ? window.location.origin : '');
+    constructor() {
+        this.baseURL = baseURL || 'https://langchain-api-server-production.up.railway.app';
         this.defaultUserId = 'web-client';
         this.defaultChatId = 'default';
+        console.log('🚀 ~ APIClient ~ constructor ~ this.baseURL:', this.baseURL)
     }
 
-    // Método genérico para hacer requests
     async request(endpoint, options = {}) {
         const url = `${this.baseURL}${endpoint}`;
         const config = {
@@ -33,17 +32,15 @@ class APIClient {
         }
     }
 
-    // Obtener información general de la API
     async getInfo() {
         return this.request('/api');
     }
 
-    // Obtener lista de vector stores disponibles
     async getVectorStores() {
         return this.request('/api/vector-stores');
     }
 
-    // Enviar mensaje de chat
+    // Send message to chat
     async sendMessage(message, options = {}) {
         const {
             vectorStore = 'combined',
@@ -59,7 +56,6 @@ class APIClient {
             chatId
         };
 
-        // Incluir configuración del modelo si está disponible
         if (modelConfig) {
             requestBody.modelConfig = modelConfig;
         }
@@ -70,7 +66,7 @@ class APIClient {
         });
     }
 
-    // Subir documento
+    // Upload document
     async uploadDocument(filename, content) {
         return this.request('/api/add-document', {
             method: 'POST',
@@ -81,22 +77,20 @@ class APIClient {
         });
     }
 
-    // Obtener lista de usuarios
+    // Get list of users
     async getUsers() {
         try {
             const response = await this.request('/api/users');
             return response;
         } catch (error) {
             console.error('Error getting users:', error);
-            // Si no se pueden obtener usuarios, retornar estructura vacía
             return { users: [] };
         }
     }
 
-    // Crear usuario (mediante envío de mensaje inicial)
+    // Create user (by sending an initial message)
     async createUser(userId) {
         try {
-            // Crear usuario enviando un mensaje inicial
             const response = await this.sendMessage('Hola, soy un nuevo usuario', {
                 vectorStore: 'combined',
                 userId: userId,
@@ -109,53 +103,50 @@ class APIClient {
         }
     }
 
-    // Obtener vector stores de un usuario
+    // Get vector stores of a user
     async getUserVectorStores(userId) {
         try {
             const response = await this.request(`/api/users/${userId}/vector-stores`);
             return response;
         } catch (error) {
             console.error(`Error getting vector stores for user ${userId}:`, error);
-            // Si no se pueden obtener, retornar estructura vacía
             return { vectorStores: [] };
         }
     }
 
-    // Obtener chats de un usuario y vector store
+    // Get chats of a user and vector store
     async getUserChats(userId, vectorName) {
         try {
             const response = await this.request(`/api/users/${userId}/vector-stores/${vectorName}/chats`);
             return response;
         } catch (error) {
             console.error(`Error getting chats for user ${userId} and vector ${vectorName}:`, error);
-            // Si no se pueden obtener, retornar estructura vacía
             return { chats: [] };
         }
     }
 
-    // Obtener chats de un usuario y vector store (alias para compatibilidad)
+    // Get chats of a user and vector store (alias for compatibility)
     async getUserVectorChats(userId, vectorName) {
         return this.getUserChats(userId, vectorName);
     }
 
-    // Obtener mensajes de un chat específico
+    // Get messages of a specific chat
     async getChatMessages(userId, vectorName, chatId) {
         try {
             const response = await this.request(`/api/users/${userId}/vector-stores/${vectorName}/chats/${chatId}/messages`);
             return response;
         } catch (error) {
             console.error(`Error getting messages for chat ${chatId}:`, error);
-            // Si no se pueden obtener, retornar estructura vacía
             return { messages: [] };
         }
     }
 
-    // Obtener historial de mensajes
+    // Get chat history
     async getChatHistory(userId, vectorName, chatId) {
         return this.getChatMessages(userId, vectorName, chatId);
     }
 
-    // Limpiar historial de chat
+    // Clear chat history
     async clearChatHistory(userId, vectorName, chatId) {
         try {
             const response = await this.request(`/api/users/${userId}/vector-stores/${vectorName}/chats/${chatId}`, {
@@ -168,7 +159,7 @@ class APIClient {
         }
     }
 
-    // Verificar conexión con el servidor
+    // Check connection with the server
     async checkConnection() {
         try {
             await this.getInfo();
@@ -179,7 +170,7 @@ class APIClient {
         }
     }
 
-    // Método helper para leer archivos como texto
+    // Helper method to read files as text
     static readFileAsText(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -189,12 +180,12 @@ class APIClient {
         });
     }
 
-    // Método helper para generar IDs únicos
+    // Helper method to generate unique IDs
     static generateId() {
         return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     }
 
-    // Método helper para formatear timestamps
+    // Helper method to format timestamps
     static formatTimestamp(date = new Date()) {
         return date.toLocaleString('es-ES', {
             year: 'numeric',
@@ -207,8 +198,5 @@ class APIClient {
     }
 }
 
-// Crear instancia global del cliente API
 window.apiClient = new APIClient();
-
-// Crear alias para compatibilidad
 window.api = window.apiClient; 

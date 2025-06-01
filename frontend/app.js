@@ -1,25 +1,24 @@
-// Aplicación principal de LangChain Document Chat Cliente Web
 const { useState, useEffect } = React;
 
 const App = () => {
-    // Estados principales
+    // Main states
     const [isConnected, setIsConnected] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [vectorStores, setVectorStores] = useState([]);
     const [selectedVectorStore, setSelectedVectorStore] = useState('combined');
     const [error, setError] = useState(null);
 
-    // Estados para gestión de usuarios y chats
+    // States for user and chat management
     const [selectedUser, setSelectedUser] = useState(null);
     const [selectedChat, setSelectedChat] = useState(null);
     
-    // Estado para sidebar collapsable
+    // State for collapsable sidebar
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
-    // Inicialización de la aplicación
+    // Initialize the application
     useEffect(() => {
         initializeApp();
-        // Restaurar último usuario y chat desde localStorage
+        // Restore last user and chat from localStorage
         restoreLastSession();
     }, []);
 
@@ -28,12 +27,12 @@ const App = () => {
         setError(null);
         
         try {
-            // Verificar conexión con el servidor
+            // Check connection with the server
             const connected = await window.apiClient.checkConnection();
             setIsConnected(connected);
 
             if (connected) {
-                // Cargar vector stores disponibles
+                // Load available vector stores
                 await loadVectorStores();
             } else {
                 setError('No se puede conectar al servidor. Verifica que esté ejecutándose en http://localhost:3000');
@@ -52,7 +51,7 @@ const App = () => {
             const response = await window.apiClient.getVectorStores();
             console.log('Vector stores response:', response);
             
-            // La API devuelve { stores: [...], default: '...' }
+            // The API returns { stores: [...], default: '...' }
             let storesArray = [];
             let defaultStore = 'combined';
             
@@ -61,7 +60,7 @@ const App = () => {
                     storesArray = response.stores;
                     defaultStore = response.default || 'combined';
                 } else if (Array.isArray(response)) {
-                    // Fallback si la respuesta es directamente un array
+                    // Fallback if the response is directly an array
                     storesArray = response;
                 } else {
                     console.warn('Unexpected vector stores response format:', response);
@@ -71,7 +70,7 @@ const App = () => {
             
             setVectorStores(storesArray);
             
-            // Seleccionar el store por defecto o 'combined' si está disponible
+            // Select the default store or 'combined' if available
             if (storesArray.includes(defaultStore)) {
                 setSelectedVectorStore(defaultStore);
             } else if (storesArray.includes('combined')) {
@@ -82,7 +81,7 @@ const App = () => {
         } catch (error) {
             console.error('Error loading vector stores:', error);
             setError(`Error cargando bases de conocimiento: ${error.message}`);
-            setVectorStores([]); // Asegurar que vectorStores sea un array
+            setVectorStores([]); // Ensure vectorStores is an array
         }
     };
 
@@ -92,7 +91,7 @@ const App = () => {
 
     const handleDocumentUploaded = async (response) => {
         console.log('Document uploaded:', response);
-        // Recargar vector stores después de subir un documento
+        // Reload vector stores after uploading a document
         await loadVectorStores();
     };
 
@@ -100,22 +99,22 @@ const App = () => {
         initializeApp();
     };
 
-    // Restaurar sesión anterior desde localStorage
+    // Restore last session from localStorage
     const restoreLastSession = () => {
         try {
             console.log('🔄 Restaurando sesión anterior...');
             
-            // Restaurar último usuario
+            // Restore last user
             const lastUser = window.StorageUtils.getLastUser();
             if (lastUser) {
                 console.log('👤 Restaurando usuario:', lastUser);
                 setSelectedUser(lastUser);
                 
-                // Restaurar último chat para el usuario
+                // Restore last chat for the user
                 const lastChat = window.StorageUtils.getLastChat();
                 if (lastChat) {
                     console.log('💬 Restaurando chat:', lastChat);
-                    // Validar que el chat tenga las propiedades necesarias
+                    // Validate that the chat has the necessary properties
                     if (lastChat.id && lastChat.vectorStore) {
                         setSelectedChat(lastChat);
                     } else {
@@ -128,30 +127,30 @@ const App = () => {
             }
         } catch (error) {
             console.warn('⚠️ Error restaurando sesión anterior:', error);
-            // En caso de error, limpiar localStorage para evitar problemas futuros
+            // In case of error, clear localStorage to avoid future problems
             window.StorageUtils.clearAll();
         }
     };
 
     const handleUserChange = (userId) => {
         setSelectedUser(userId);
-        // Guardar usuario en localStorage
+        // Save user in localStorage
         window.StorageUtils.saveLastUser(userId);
         
-        // Resetear chat cuando cambia el usuario y limpiar chat guardado
+        // Reset chat when user changes and clear saved chat
         setSelectedChat(null);
         window.StorageUtils.clearLastChat();
     };
 
     const handleChatChange = (chat) => {
         setSelectedChat(chat);
-        // Guardar chat en localStorage
+        // Save chat in localStorage
         if (chat) {
             window.StorageUtils.saveLastChat(chat);
         }
     };
 
-    // Obtener información del usuario para mostrar en el header
+    // Get user information to display in the header
     const getCurrentUserInfo = () => {
         if (!selectedUser) {
             return {
@@ -172,7 +171,7 @@ const App = () => {
         };
     };
 
-    // Renderizado condicional para errores de conexión
+    // Conditional rendering for connection errors
     if (error && !isConnected) {
         return (
             <div className="app">
@@ -234,7 +233,7 @@ const App = () => {
 
     const userInfo = getCurrentUserInfo();
 
-    // Renderizado principal de la aplicación
+    // Main rendering of the application
     return (
         <div className="app">
             {/* Header */}
@@ -373,7 +372,7 @@ const App = () => {
     );
 };
 
-// Renderizar la aplicación
+// Render the application
 const rootElement = document.getElementById('root');
 const root = ReactDOM.createRoot(rootElement);
 root.render(<App />); 
