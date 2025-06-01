@@ -1,7 +1,7 @@
-import { SystemMessage, HumanMessage, AIMessage } from '@langchain/core/messages';
+import { HumanMessage, AIMessage } from '@langchain/core/messages';
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 import { ChatOpenAI } from '@langchain/openai';
-import { RunnablePassthrough, RunnableSequence } from '@langchain/core/runnables';
+import { RunnableSequence } from '@langchain/core/runnables';
 import { Document } from '@langchain/core/documents';
 
 // Configuration interface for the model
@@ -87,24 +87,18 @@ export function createChatChain(model: ChatOpenAI, retriever: any, systemPrompt:
   // Define the RAG pipeline
   const chain = RunnableSequence.from([
     {
-      // First, prepare inputs for retrieval and later steps
       context: async (input: any) => {
-        // Make sure we're passing a string to the retriever
         const query = typeof input.input === 'string' ? input.input : String(input.input);
-        // Now get the documents and concatenate their content
         const docs = await retriever.getRelevantDocuments(query);
         return docs.map((doc: Document) => doc.pageContent).join("\n\n");
       },
       input: (input: any) => input.input,
       chat_history: (input: any) => input.chat_history || [],
     },
-    // Then feed the docs, question, and chat history to the prompt
     prompt,
-    // Finally, generate the answer using the model
     model,
   ]);
   
-  // Return the chain
   return chain;
 }
 

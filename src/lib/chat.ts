@@ -1,9 +1,8 @@
 import { loadDocuments, splitDocuments, loadSingleDocument, listAvailableDocuments, splitDocumentsSemanticAware } from './document.js';
-import { createEmbeddings, createFastEmbeddings, VectorStoreManager } from './vectorstore.js';
+import { createEmbeddings, VectorStoreManager } from './vectorstore.js';
 import { createLanguageModel, createChatChain, formatChatHistory, ModelConfig, defaultModelConfig, conservativeModelConfig } from './model.js';
 import { startChatInterface } from './interface.js';
 import { createApiServer } from './api.js';
-import { HumanMessage, AIMessage } from '@langchain/core/messages';
 import { ChatHistoryManager } from './chatHistory.js';
 
 // Main initialization function for the chat system with multiple vector stores
@@ -32,7 +31,6 @@ export async function initializeChat() {
     const splitDocs = await splitDocuments(docs);
     await vectorStoreManager.loadOrCreateVectorStore('combined', splitDocs);
   } else if (combinedStoreExists) {
-    // Load existing combined store only if it exists
     console.log('Loading existing combined vector store...');
     await vectorStoreManager.loadOrCreateVectorStore('combined');
   } else {
@@ -94,7 +92,6 @@ export async function initializeChat() {
     console.log('Default chain created with combined vector store');
   } catch (error) {
     console.error('Error creating default chain with combined store:', error);
-    // This shouldn't happen anymore since we always create combined store
   }
   
   // Create a manager function to handle chat state
@@ -158,7 +155,7 @@ export async function initializeChat() {
       } catch (error) {
         console.error("Error in processMessage:", error);
         return {
-          text: "Lo siento, ocurrió un error al procesar tu pregunta. Por favor intenta de nuevo o reformula tu pregunta de manera más específica.",
+          text: "Sorry, there was an error processing your question. Please try again or rephrase your question in a more specific way.",
           sourceDocuments: [],
         };
       }
@@ -194,5 +191,4 @@ export async function startCLI() {
   startChatInterface(chatManager.chain, chatManager.model, chatManager.vectorStoreManager, chatManager);
 }
 
-// Re-export the interfaces
 export { startChatInterface, createApiServer }; 

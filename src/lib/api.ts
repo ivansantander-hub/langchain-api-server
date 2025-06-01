@@ -2,9 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { ChatOpenAI } from '@langchain/openai';
 import { VectorStoreManager } from './vectorstore.js';
-import { createChatChain, createLanguageModel, availableModels, defaultModelConfig, ModelConfig } from './model.js';
+import { availableModels, defaultModelConfig, ModelConfig } from './model.js';
 import { saveUploadedDocument, loadSingleDocument, splitDocuments } from './document.js';
 import OpenAI from 'openai';
 
@@ -28,7 +27,6 @@ interface ChatRequest {
 // Create Express app with support for multiple vector stores
 export function createApiServer(
   chatManager: any,
-  model: ChatOpenAI,
   vectorStoreManager: VectorStoreManager
 ) {
   const app = express();

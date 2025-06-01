@@ -18,7 +18,6 @@ async function main() {
     // Initialize and start API server with vector store manager
     const apiServer = createApiServer(
       chatManager, 
-      chatManager.model, 
       chatManager.vectorStoreManager
     );
     await apiServer.startServer();
