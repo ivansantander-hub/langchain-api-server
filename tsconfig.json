@@ -10,7 +10,8 @@
     "declaration": true,
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
-    "forceConsistentCasingInFileNames": false
+    "forceConsistentCasingInFileNames": false,
+    "isolatedModules": true
   },
   "include": ["src/**/*", "lib/**/*", "src/types/**/*"],
   "exclude": ["node_modules"]
