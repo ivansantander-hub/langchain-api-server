@@ -39,7 +39,7 @@ Recuerda: Solo usa la información del contexto anterior. Si no está ahí, no l
 
 // More conservative configuration for critical applications
 export const conservativeModelConfig: ModelConfig = {
-  modelName: 'gpt-4-turbo',
+  modelName: 'gpt-4.1-nano',
   temperature: 0.0,
   systemPrompt: `Eres un asistente que responde preguntas EXCLUSIVAMENTE basándote en el contexto de documentos proporcionado.
 
