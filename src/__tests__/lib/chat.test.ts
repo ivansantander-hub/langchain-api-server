@@ -338,8 +338,6 @@ describe('chat.ts', () => {
       await startCLI();
 
       expect(startChatInterface).toHaveBeenCalledWith(
-        null, // chain (can be null)
-        expect.anything(), // model
         expect.anything(), // vectorStoreManager
         expect.anything()  // chatManager
       );

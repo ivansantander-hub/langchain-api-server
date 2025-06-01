@@ -188,7 +188,7 @@ export async function initializeChat() {
 // Initialize CLI chat interface with vector store selection
 export async function startCLI() {
   const chatManager = await initializeChat();
-  startChatInterface(chatManager.chain, chatManager.model, chatManager.vectorStoreManager, chatManager);
+  startChatInterface(chatManager.vectorStoreManager, chatManager);
 }
 
 export { startChatInterface, createApiServer }; 

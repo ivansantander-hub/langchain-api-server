@@ -1,12 +1,8 @@
 import * as readline from 'readline';
-import { ChatOpenAI } from '@langchain/openai';
 import { VectorStoreManager } from './vectorstore.js';
-import { createChatChain } from './model.js';
 
 // Chat interface with vector store selection and user/chat context
 export function startChatInterface(
-  defaultChain: any, 
-  model: ChatOpenAI, 
   vectorStoreManager: VectorStoreManager,
   chatManager: any
 ) {
