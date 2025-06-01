@@ -1,12 +1,10 @@
-// Test setup file
-
 import { jest } from '@jest/globals';
 
 // Extend Jest matchers for better TypeScript support
 declare global {
   namespace jest {
     interface AsymmetricMatchers {
-      any(sample: any): any;
+      any<T>(sample: T): T;
     }
   }
 }
@@ -15,7 +13,6 @@ declare global {
 process.env.OPENAI_API_KEY = 'test-api-key';
 process.env.NODE_ENV = 'test';
 
-// Basic console mocking for cleaner test output
 const originalConsole = global.console;
 global.console = {
   ...originalConsole,
@@ -25,19 +22,19 @@ global.console = {
   info: () => {},
 };
 
-// Mock process.exit
+// Mock process.exit with proper typing
 const mockExit = jest.fn();
-process.exit = mockExit as any;
+// @ts-expect-error Mocking process.exit for tests
+process.exit = mockExit;
 
-// Extend global interface for TypeScript
 declare global {
   var mockExit: jest.Mock;
 }
 
 // Global test utilities
-(global as any).mockExit = mockExit;
+global.mockExit = mockExit;
 
-// Configuración global para mocks
+// Global setup for mocks
 beforeEach(() => {
   jest.clearAllMocks();
 });
