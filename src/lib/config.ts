@@ -47,7 +47,7 @@ export const highQualityConfig: RAGConfig = {
     mmrLambda: 0.25,
   },
   model: {
-    name: 'gpt-4-turbo',
+    name: 'gpt-4.1-nano',
     temperature: 0.0,
     maxTokens: 1000,
     topP: 0.5,
@@ -75,7 +75,7 @@ export const balancedConfig: RAGConfig = {
     mmrLambda: 0.3,
   },
   model: {
-    name: 'gpt-4-turbo',
+    name: 'gpt-4.1-nano',
     temperature: 0.1,
     maxTokens: 1500,
     topP: 0.8,

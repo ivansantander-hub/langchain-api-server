@@ -27,7 +27,7 @@
 ### 4. **Modelo Propenso a Alucinaciones**
 **Problema**: GPT-3.5 con temperatura alta (0.7)
 **Solución**:
-- Upgrade a GPT-4-turbo
+- Upgrade a GPT-4.1-nano
 - Temperatura muy baja (0.0-0.1) para determinismo
 - Prompts estrictos anti-alucinaciones
 - TopP conservador (0.5-0.8)
@@ -63,7 +63,7 @@ import { highQualityConfig } from './config.js';
 // - text-embedding-3-large (3072 dims)
 // - Chunking semántico (600 chars)
 // - Retriever avanzado (6 docs, threshold 0.7)
-// - GPT-4-turbo (temp 0.0)
+// - GPT-4.1-nano (temp 0.0)
 ```
 
 ### Balanceada (Buen equilibrio)
@@ -72,7 +72,7 @@ import { balancedConfig } from './config.js';
 // - text-embedding-3-small (1536 dims)
 // - Chunking estándar mejorado (800 chars)
 // - Retriever avanzado (8 docs, threshold 0.6)
-// - GPT-4-turbo (temp 0.1)
+// - GPT-4.1-nano (temp 0.1)
 ```
 
 ### Rápida (Para pruebas)

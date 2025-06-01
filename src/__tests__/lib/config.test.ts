@@ -165,9 +165,9 @@ describe('config.ts', () => {
   describe('Configuration comparison', () => {
     it('should have quality hierarchy: fast < balanced < highQuality', () => {
       // Model quality
-      expect(['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo']).toContain(fastConfig.model.name);
-      expect(['gpt-4', 'gpt-4-turbo']).toContain(balancedConfig.model.name);
-      expect(['gpt-4', 'gpt-4-turbo']).toContain(highQualityConfig.model.name);
+      expect(['gpt-3.5-turbo', 'gpt-4', 'gpt-4.1-nano']).toContain(fastConfig.model.name);
+      expect(['gpt-4', 'gpt-4.1-nano']).toContain(balancedConfig.model.name);
+      expect(['gpt-4', 'gpt-4.1-nano']).toContain(highQualityConfig.model.name);
       
       // Temperature (lower is better for accuracy)
       expect(highQualityConfig.model.temperature).toBeLessThanOrEqual(balancedConfig.model.temperature);
