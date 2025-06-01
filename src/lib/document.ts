@@ -77,15 +77,114 @@ export function listAvailableDocuments(): string[] {
     .filter(file => file.endsWith('.txt') || file.endsWith('.pdf'));
 }
 
-// Split the documents into chunks
+// Split the documents into chunks with improved parameters
 export async function splitDocuments(docs: Document[]) {
-  console.log('Splitting documents...');
+  console.log('Splitting documents with improved chunking...');
   const textSplitter = new RecursiveCharacterTextSplitter({
-    chunkSize: 1000,
-    chunkOverlap: 200,
+    chunkSize: 800, // Chunks más pequeños para mayor precisión
+    chunkOverlap: 150, // Overlap reducido pero suficiente
+    separators: ["\n\n", "\n", ". ", "! ", "? ", " ", ""], // Separadores más inteligentes
+    keepSeparator: true,
   });
   
   const splitDocs = await textSplitter.splitDocuments(docs);
-  console.log(`Documents split into ${splitDocs.length} chunks.`);
-  return splitDocs;
+  
+  // Post-procesar chunks para mejorar calidad
+  const improvedChunks = splitDocs
+    .filter(doc => doc.pageContent.trim().length > 50) // Filtrar chunks muy pequeños
+    .map(doc => {
+      // Limpiar y normalizar el contenido
+      const cleanContent = doc.pageContent
+        .replace(/\s+/g, ' ') // Normalizar espacios
+        .replace(/\n{3,}/g, '\n\n') // Normalizar saltos de línea
+        .trim();
+      
+      return new Document({
+        pageContent: cleanContent,
+        metadata: {
+          ...doc.metadata,
+          chunkLength: cleanContent.length,
+          processed: true
+        }
+      });
+    });
+  
+  console.log(`Documents split into ${improvedChunks.length} high-quality chunks.`);
+  return improvedChunks;
+}
+
+// Advanced semantic chunking (for better document understanding)
+export async function splitDocumentsSemanticAware(docs: Document[]) {
+  console.log('Splitting documents with semantic-aware chunking...');
+  
+  // Different strategies for different content types
+  const strategies = {
+    technical: {
+      chunkSize: 600,
+      chunkOverlap: 100,
+      separators: ["\n\n", "\n", ". ", ":", ";", " ", ""]
+    },
+    narrative: {
+      chunkSize: 1000,
+      chunkOverlap: 200,
+      separators: ["\n\n", "\n", ". ", "! ", "? ", " ", ""]
+    },
+    default: {
+      chunkSize: 800,
+      chunkOverlap: 150,
+      separators: ["\n\n", "\n", ". ", "! ", "? ", " ", ""]
+    }
+  };
+
+  const allChunks: Document[] = [];
+
+  for (const doc of docs) {
+    // Detect content type based on characteristics
+    const content = doc.pageContent;
+    let strategy = strategies.default;
+    
+    // Simple heuristics for content type detection
+    if (content.includes('function') || content.includes('class') || content.includes('API')) {
+      strategy = strategies.technical;
+    } else if (content.split('. ').length > content.split('\n').length) {
+      strategy = strategies.narrative;
+    }
+
+    console.log(`Processing document with ${strategy === strategies.technical ? 'technical' : strategy === strategies.narrative ? 'narrative' : 'default'} strategy`);
+
+    const textSplitter = new RecursiveCharacterTextSplitter({
+      chunkSize: strategy.chunkSize,
+      chunkOverlap: strategy.chunkOverlap,
+      separators: strategy.separators,
+      keepSeparator: true,
+    });
+
+    const chunks = await textSplitter.splitDocuments([doc]);
+    
+    // Enhance chunks with better metadata
+    const enhancedChunks = chunks
+      .filter(chunk => chunk.pageContent.trim().length > 30)
+      .map((chunk, index) => {
+        const cleanContent = chunk.pageContent
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        return new Document({
+          pageContent: cleanContent,
+          metadata: {
+            ...chunk.metadata,
+            chunkIndex: index,
+            chunkLength: cleanContent.length,
+            contentType: strategy === strategies.technical ? 'technical' : 
+                        strategy === strategies.narrative ? 'narrative' : 'general',
+            quality: cleanContent.length > 100 ? 'high' : 'medium'
+          }
+        });
+      });
+
+    allChunks.push(...enhancedChunks);
+  }
+
+  console.log(`Documents split into ${allChunks.length} semantic-aware chunks.`);
+  return allChunks;
 } 

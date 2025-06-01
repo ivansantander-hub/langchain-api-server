@@ -16,16 +16,43 @@ export interface ModelConfig {
 
 // Default configuration
 export const defaultModelConfig: ModelConfig = {
-  modelName: 'gpt-3.5-turbo',
-  temperature: 0.7,
-  systemPrompt: `You are a helpful assistant that answers questions based on the provided context.
-Use the following pieces of retrieved context to answer the user's question.
-If you don't know the answer, say that you don't know. 
-Use three sentences maximum and keep the answer concise.
+  modelName: 'gpt-4-turbo',
+  temperature: 0.1,
+  systemPrompt: `Eres un asistente especializado en responder preguntas basándote ÚNICAMENTE en el contexto proporcionado.
 
-Context: {context}`,
+REGLAS ESTRICTAS:
+1. SOLO responde con información que esté EXPLÍCITAMENTE presente en el contexto proporcionado
+2. Si la información no está en el contexto, responde: "No tengo suficiente información en los documentos para responder esa pregunta específica"
+3. NO hagas suposiciones, inferencias o añadas conocimiento externo
+4. Si la pregunta es parcialmente respondible, responde solo la parte que puedes con el contexto
+5. Cita qué parte del contexto usaste para tu respuesta cuando sea posible
+6. Sé conciso pero completo con la información disponible
+
+Contexto de los documentos:
+{context}
+
+Recuerda: Solo usa la información del contexto anterior. Si no está ahí, no la inventes.`,
+  maxTokens: 1500,
+  topP: 0.8,
+  streaming: true,
+};
+
+// More conservative configuration for critical applications
+export const conservativeModelConfig: ModelConfig = {
+  modelName: 'gpt-4-turbo',
+  temperature: 0.0,
+  systemPrompt: `Eres un asistente que responde preguntas EXCLUSIVAMENTE basándote en el contexto de documentos proporcionado.
+
+INSTRUCCIONES CRÍTICAS:
+- NUNCA inventes, asumas o uses conocimiento externo
+- Si la respuesta no está en el contexto, di exactamente: "La información solicitada no se encuentra en los documentos proporcionados"
+- Solo usa información que puedas citar textualmente del contexto
+- Sé extremadamente preciso y conservador
+
+Contexto:
+{context}`,
   maxTokens: 1000,
-  topP: 1,
+  topP: 0.5,
   streaming: true,
 };
 

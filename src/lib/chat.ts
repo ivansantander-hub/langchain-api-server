@@ -1,6 +1,6 @@
-import { loadDocuments, splitDocuments, loadSingleDocument, listAvailableDocuments } from './document.js';
-import { createEmbeddings, VectorStoreManager } from './vectorstore.js';
-import { createLanguageModel, createChatChain, formatChatHistory, ModelConfig, defaultModelConfig } from './model.js';
+import { loadDocuments, splitDocuments, loadSingleDocument, listAvailableDocuments, splitDocumentsSemanticAware } from './document.js';
+import { createEmbeddings, createFastEmbeddings, VectorStoreManager } from './vectorstore.js';
+import { createLanguageModel, createChatChain, formatChatHistory, ModelConfig, defaultModelConfig, conservativeModelConfig } from './model.js';
 import { startChatInterface } from './interface.js';
 import { createApiServer } from './api.js';
 import { HumanMessage, AIMessage } from '@langchain/core/messages';
@@ -105,44 +105,35 @@ export async function initializeChat() {
     chatHistoryManager,
     
     // Process a message in a specific context
-    async processMessage(message: string, userId: string = 'default', chatId: string = 'default', storeName: string = 'combined', modelConfig?: ModelConfig) {
+    async processMessage(message: string, userId: string = 'default', chatId: string = 'default', storeName: string = 'combined', modelConfig?: ModelConfig, useAdvancedRetrieval: boolean = true) {
       try {
         // Get appropriate retriever if specified
         let chain = this.chain;
         let model = this.model;
         
-        // If model configuration is provided, create a new model instance
-        if (modelConfig) {
-          model = createLanguageModel(modelConfig);
+        // Use conservative model config by default for better accuracy
+        const finalModelConfig = modelConfig || conservativeModelConfig;
+        
+        // Create model with final configuration
+        model = createLanguageModel(finalModelConfig);
+        
+        // Choose retriever based on preferences
+        let retriever;
+        if (useAdvancedRetrieval) {
+          console.log(`Using advanced retriever for store: ${storeName}`);
+          retriever = this.vectorStoreManager.getAdvancedRetriever(storeName, 6);
+        } else {
+          console.log(`Using standard MMR retriever for store: ${storeName}`);
+          retriever = this.vectorStoreManager.getRetriever(storeName, 8, 'mmr');
         }
         
-        if (storeName !== 'combined') {
-          const retriever = this.vectorStoreManager.getRetriever(storeName);
-          chain = createChatChain(model, retriever, modelConfig?.systemPrompt);
-        } else if (!chain || modelConfig) {
-          // If no default chain and requesting combined, or if custom config provided
-          if (this.vectorStoreManager.storeExists('combined')) {
-            const retriever = this.vectorStoreManager.getRetriever('combined');
-            chain = createChatChain(model, retriever, modelConfig?.systemPrompt);
-            // Only update default chain if no custom config
-            if (!modelConfig) {
-              this.chain = chain;
-            }
-          } else {
-            // Create combined store on demand if it doesn't exist
-            console.log('Creating combined store on demand...');
-            await this.vectorStoreManager.loadOrCreateVectorStore('combined');
-            const retriever = this.vectorStoreManager.getRetriever('combined');
-            chain = createChatChain(model, retriever, modelConfig?.systemPrompt);
-            // Only update default chain if no custom config
-            if (!modelConfig) {
-              this.chain = chain;
-            }
-          }
-        }
+        // Create chain with the selected retriever and model
+        chain = createChatChain(model, retriever, finalModelConfig.systemPrompt);
         
         // Get chat history for this user, vector store, and chat
         const history = this.chatHistoryManager.getChatHistory(userId, storeName, chatId);
+        
+        console.log(`Processing message with ${useAdvancedRetrieval ? 'advanced' : 'standard'} retrieval, model: ${finalModelConfig.modelName}, temp: ${finalModelConfig.temperature}`);
         
         // Process the message with appropriate chat history
         const formattedHistory = formatChatHistory(history);
@@ -167,7 +158,7 @@ export async function initializeChat() {
       } catch (error) {
         console.error("Error in processMessage:", error);
         return {
-          text: "Lo siento, ocurrió un error al procesar tu pregunta. Por favor intenta de nuevo.",
+          text: "Lo siento, ocurrió un error al procesar tu pregunta. Por favor intenta de nuevo o reformula tu pregunta de manera más específica.",
           sourceDocuments: [],
         };
       }

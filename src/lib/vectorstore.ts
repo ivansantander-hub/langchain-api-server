@@ -8,8 +8,21 @@ import * as path from 'path';
 export function createEmbeddings() {
   console.log('Creating embeddings with OpenAI...');
   return new OpenAIEmbeddings({
+    modelName: "text-embedding-3-large",
+    dimensions: 3072,
+    stripNewLines: true,
+    batchSize: 512
+  });
+}
+
+// Alternative embedding configuration for faster but still good performance
+export function createFastEmbeddings() {
+  console.log('Creating fast embeddings with OpenAI...');
+  return new OpenAIEmbeddings({
     modelName: "text-embedding-3-small",
-    dimensions: 1536
+    dimensions: 1536,
+    stripNewLines: true,
+    batchSize: 1024
   });
 }
 
@@ -130,16 +143,61 @@ export class VectorStoreManager {
     }
   }
   
-  // Get a retriever for a specific vector store
-  getRetriever(storeName: string, k: number = 5) {
+  // Get a retriever for a specific vector store with improved search parameters
+  getRetriever(storeName: string, k: number = 10, searchType: 'similarity' | 'mmr' = 'mmr') {
     if (!this.vectorStores.has(storeName)) {
       throw new Error(`Vector store ${storeName} not found. Load it first.`);
     }
     
-    return this.vectorStores.get(storeName)!.asRetriever({
-      k,
-      searchType: 'similarity',
-    });
+    if (searchType === 'mmr') {
+      return this.vectorStores.get(storeName)!.asRetriever({
+        k: Math.min(k, 20),
+        searchType: 'mmr',
+        searchKwargs: {
+          fetchK: k * 3,
+          lambda: 0.25,
+        },
+      });
+    } else {
+      return this.vectorStores.get(storeName)!.asRetriever({
+        k: Math.min(k, 20),
+        searchType: 'similarity',
+      });
+    }
+  }
+  
+  // Advanced retriever with multiple search strategies and reranking
+  getAdvancedRetriever(storeName: string, k: number = 8) {
+    if (!this.vectorStores.has(storeName)) {
+      throw new Error(`Vector store ${storeName} not found. Load it first.`);
+    }
+
+    const store = this.vectorStores.get(storeName)!;
+    
+    // Return a custom retriever that combines multiple strategies
+    return {
+      getRelevantDocuments: async (query: string) => {
+        try {
+          // 1. Get similarity-based results with scores
+          const similarityResults = await store.similaritySearchWithScore(query, k * 2);
+
+          // 2. Filter results by score threshold and deduplicate
+          const filteredResults = similarityResults
+            .filter(([doc, score]) => score >= 0.6)
+            .map(([doc, score]) => ({ doc, score }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, k);
+
+          console.log(`Advanced retriever: Found ${filteredResults.length} relevant documents (score >= 0.6) for query: "${query.substring(0, 50)}..."`);
+          
+          return filteredResults.map(result => result.doc);
+        } catch (error) {
+          console.error('Error in advanced retriever:', error);
+          // Fallback to basic similarity search
+          return await store.similaritySearch(query, k);
+        }
+      }
+    };
   }
   
   // Get the names of all available vector stores
