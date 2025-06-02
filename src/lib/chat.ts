@@ -155,8 +155,8 @@ NOTA: Las instrucciones anteriores sobre el uso de documentos siguen siendo impo
         // Create chain with the selected retriever and model
         chain = createChatChain(model, retriever, effectiveSystemPrompt);
         
-        // Get chat history for this user, vector store, and chat
-        const history = this.chatHistoryManager.getChatHistory(userId, storeName, chatId);
+        // Get chat history for this user, vector store, and chat (legacy format for model processing)
+        const history = this.chatHistoryManager.getChatHistoryLegacy(userId, storeName, chatId);
         
         console.log(`Processing message with ${useAdvancedRetrieval ? 'advanced' : 'standard'} retrieval, model: ${finalModelConfig.modelName}, temp: ${finalModelConfig.temperature}`);
         

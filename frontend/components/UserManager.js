@@ -34,7 +34,7 @@ const UserManager = ({ onUserChange, onChatChange, selectedUser, selectedChat, c
             setChats(prevChats => 
                 prevChats.map(chat => 
                     chat.id === chatId 
-                        ? { ...chat, preview: firstMessage }
+                        ? { ...chat, preview: firstMessage.substring(0, 50) + '...' }
                         : chat
                 )
             );
@@ -50,28 +50,18 @@ const UserManager = ({ onUserChange, onChatChange, selectedUser, selectedChat, c
     const loadUsers = async () => {
         try {
             setIsLoading(true);
-            setError(null);
             const response = await window.apiClient.getUsers();
-            
-            // Manejar diferentes formatos de respuesta
-            let usersList = [];
-            if (response && Array.isArray(response.users)) {
-                usersList = response.users;
-            } else if (response && Array.isArray(response)) {
-                usersList = response;
-            } else if (response && typeof response === 'object' && response.users) {
-                usersList = response.users || [];
-            }
-            
-            setUsers(usersList);
+            const userList = response.users || [];
+            setUsers(userList);
+            setError(null);
             
             // Si no hay usuario seleccionado pero hay usuarios disponibles, seleccionar el primero
-            if (!selectedUser && usersList.length > 0) {
-                onUserChange(usersList[0]);
+            if (!selectedUser && userList.length > 0) {
+                onUserChange(userList[0]);
             }
         } catch (error) {
             console.error('Error loading users:', error);
-            setError('Error al cargar usuarios: ' + error.message);
+            setError('Error al cargar usuarios');
             setUsers([]);
         } finally {
             setIsLoading(false);
@@ -81,46 +71,94 @@ const UserManager = ({ onUserChange, onChatChange, selectedUser, selectedChat, c
     const loadUserChats = async (userId) => {
         try {
             setIsLoading(true);
-            // Obtener todos los vector stores para el usuario
-            const vectorStoresResponse = await window.apiClient.getUserVectorStores(userId);
-            const vectorStores = vectorStoresResponse.vectorStores || [];
+            console.log(`Cargando chats para usuario: ${userId}`);
+            
+            // Primero, obtener todos los vector stores disponibles (incluyendo 'combined')
+            const allVectorStores = ['combined']; // Siempre incluir el vector store por defecto
+            
+            try {
+                // Obtener vector stores personalizados del usuario
+                const vectorStoresResponse = await window.apiClient.getUserVectorStores(userId);
+                const userVectorStores = vectorStoresResponse.vectorStores || [];
+                console.log(`Vector stores personalizados encontrados: ${userVectorStores.length}`, userVectorStores);
+                
+                // Agregar vector stores únicos
+                userVectorStores.forEach(store => {
+                    if (!allVectorStores.includes(store)) {
+                        allVectorStores.push(store);
+                    }
+                });
+            } catch (vectorStoreError) {
+                console.warn('Error obteniendo vector stores personalizados:', vectorStoreError);
+            }
+            
+            console.log(`Total vector stores a revisar: ${allVectorStores.length}`, allVectorStores);
             
             let allChats = [];
             
             // Para cada vector store, obtener los chats
-            for (const vectorStore of vectorStores) {
+            for (const vectorStore of allVectorStores) {
                 try {
                     const chatsResponse = await window.apiClient.getUserVectorChats(userId, vectorStore);
                     const vectorChats = chatsResponse.chats || [];
+                    console.log(`Chats en ${vectorStore}: ${vectorChats.length}`, vectorChats);
                     
                     // Agregar información del vector store a cada chat
-                    const enrichedChats = vectorChats.map(chatId => {
+                    for (const chatId of vectorChats) {
                         // Buscar nombre personalizado en localStorage
                         const chatKey = `chat_name_${userId}_${vectorStore}_${chatId}`;
                         const customName = localStorage.getItem(chatKey);
-                        const defaultName = `${vectorStore} - ${chatId.slice(-8)}`;
                         
-                        return {
+                        // Generar nombre por defecto más descriptivo
+                        let defaultName;
+                        if (vectorStore === 'combined') {
+                            defaultName = `Chat General ${chatId.slice(-8)}`;
+                        } else {
+                            defaultName = `${vectorStore} - ${chatId.slice(-8)}`;
+                        }
+                        
+                        // Intentar obtener el preview del primer mensaje
+                        let preview = 'Chat disponible - Click para cargar';
+                        try {
+                            const messagesResponse = await window.apiClient.getChatMessages(userId, vectorStore, chatId);
+                            const messages = messagesResponse.messages || [];
+                            if (messages.length > 0) {
+                                const firstMessage = messages[0].question || messages[0].answer || '';
+                                preview = firstMessage.substring(0, 50) + (firstMessage.length > 50 ? '...' : '');
+                            }
+                        } catch (messageError) {
+                            console.debug(`No se pudieron cargar mensajes para chat ${chatId}:`, messageError);
+                        }
+                        
+                        allChats.push({
                             id: chatId,
                             userId: userId,
                             vectorStore: vectorStore,
                             displayName: customName || defaultName,
                             customName: customName,
-                            preview: 'Chat disponible'
-                        };
-                    });
-                    
-                    allChats = [...allChats, ...enrichedChats];
+                            preview: preview
+                        });
+                    }
                 } catch (vectorError) {
                     console.warn(`Error loading chats for vector store ${vectorStore}:`, vectorError);
                 }
             }
             
+            // Ordenar chats por nombre para una mejor presentación
+            allChats.sort((a, b) => {
+                // Primero los chats generales (combined), luego los demás
+                if (a.vectorStore === 'combined' && b.vectorStore !== 'combined') return -1;
+                if (a.vectorStore !== 'combined' && b.vectorStore === 'combined') return 1;
+                return a.displayName.localeCompare(b.displayName);
+            });
+            
+            console.log(`Total chats cargados: ${allChats.length}`);
             setChats(allChats);
             setError(null);
             
             // Si no hay chat seleccionado pero hay chats disponibles, seleccionar el primero
             if (!selectedChat && allChats.length > 0) {
+                console.log('Seleccionando primer chat disponible:', allChats[0]);
                 onChatChange(allChats[0]);
             }
         } catch (error) {
@@ -133,11 +171,13 @@ const UserManager = ({ onUserChange, onChatChange, selectedUser, selectedChat, c
     };
 
     const handleUserSelect = (userId) => {
+        console.log('Usuario seleccionado:', userId);
         onUserChange(userId);
         onChatChange(null); // Resetear chat seleccionado
     };
 
     const handleChatSelect = (chat) => {
+        console.log('Chat seleccionado:', chat);
         onChatChange(chat);
     };
 
@@ -214,6 +254,10 @@ const UserManager = ({ onUserChange, onChatChange, selectedUser, selectedChat, c
                 onChatChange(null);
             }
             
+            // Eliminar también el nombre personalizado del localStorage
+            const chatKey = `chat_name_${chat.userId}_${chat.vectorStore}_${chat.id}`;
+            localStorage.removeItem(chatKey);
+            
         } catch (error) {
             console.error('Error deleting chat:', error);
             setError('Error al eliminar el chat: ' + error.message);
@@ -222,23 +266,56 @@ const UserManager = ({ onUserChange, onChatChange, selectedUser, selectedChat, c
         }
     };
 
-    const handleNewChat = () => {
-        // Crear un nuevo chat con un ID único
-        const newChatId = window.apiClient.constructor.generateId();
-        const newChat = {
-            id: newChatId,
-            userId: selectedUser,
-            vectorStore: 'combined', // Vector store por defecto
-            displayName: `Nuevo Chat - ${newChatId.slice(-8)}`,
-            preview: 'Chat nuevo - Sin mensajes',
-            customName: null // Indica que no tiene nombre personalizado
-        };
-        
-        // Seleccionar el nuevo chat
-        onChatChange(newChat);
-        
-        // Agregar el nuevo chat a la lista local para que aparezca inmediatamente
-        setChats(prevChats => [newChat, ...prevChats]);
+    const handleNewChat = async () => {
+        if (!selectedUser) {
+            setError('Debe seleccionar un usuario primero');
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+            setError(null);
+            
+            // Crear un nuevo chat con un ID único
+            const newChatId = window.apiClient.constructor.generateId();
+            const vectorStore = 'combined'; // Vector store por defecto
+            
+            console.log(`Creando nuevo chat para usuario ${selectedUser}: ${newChatId}`);
+            
+            // Enviar un mensaje inicial para que el chat se registre en el servidor
+            const initialMessage = 'Nuevo chat iniciado';
+            const response = await window.apiClient.sendMessage(initialMessage, {
+                vectorStore: vectorStore,
+                userId: selectedUser,
+                chatId: newChatId
+            });
+            
+            console.log('Chat creado exitosamente en el servidor:', response);
+            
+            // Crear el objeto del nuevo chat
+            const newChat = {
+                id: newChatId,
+                userId: selectedUser,
+                vectorStore: vectorStore,
+                displayName: `Chat ${new Date().toLocaleTimeString()}`,
+                preview: initialMessage,
+                customName: null // Indica que no tiene nombre personalizado
+            };
+            
+            // Agregar el nuevo chat a la lista local para que aparezca inmediatamente
+            setChats(prevChats => [newChat, ...prevChats]);
+            
+            // Seleccionar el nuevo chat
+            onChatChange(newChat);
+            
+            console.log('Nuevo chat agregado a la lista local:', newChat);
+            
+        } catch (error) {
+            console.error('Error creando nuevo chat:', error);
+            setError('Error al crear el chat: ' + error.message);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleEditChatName = (chat, event) => {
@@ -290,7 +367,7 @@ const UserManager = ({ onUserChange, onChatChange, selectedUser, selectedChat, c
     if (tabsOnly) {
         return (
             <div className="chat-tabs-only">
-                {selectedUser && chats.length > 0 && (
+                {selectedUser ? (
                     <div className="chat-tabs-list">
                         {chats.map(chat => (
                             <div
@@ -299,7 +376,7 @@ const UserManager = ({ onUserChange, onChatChange, selectedUser, selectedChat, c
                                     selectedChat.id === chat.id && 
                                     selectedChat.vectorStore === chat.vectorStore ? 'active' : ''}`}
                                 onClick={() => handleChatSelect(chat)}
-                                title={chat.preview}
+                                title={`${chat.displayName} - ${chat.preview}`}
                             >
                                 {editingChatId === chat.id ? (
                                     <div className="chat-edit-form" onClick={(e) => e.stopPropagation()}>
@@ -347,11 +424,18 @@ const UserManager = ({ onUserChange, onChatChange, selectedUser, selectedChat, c
                         <button
                             className="new-chat-tab"
                             onClick={handleNewChat}
-                            disabled={isLoading}
+                            disabled={isLoading || !selectedUser}
                             title="Crear nuevo chat"
                         >
                             <i className="fas fa-plus"></i>
                         </button>
+                    </div>
+                ) : (
+                    <div className="chat-tabs-empty">
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                            <i className="fas fa-user"></i>
+                            Selecciona un usuario para ver los chats
+                        </span>
                     </div>
                 )}
             </div>

@@ -27,7 +27,7 @@ export interface ModelConfig {
 
 // Default configuration
 export const defaultModelConfig: ModelConfig = {
-  modelName: 'gpt-4.1-nano',
+  modelName: 'gpt-3.5-turbo',
   temperature: 0.1,
   systemPrompt: `Eres un asistente especializado en responder preguntas basándote ÚNICAMENTE en el contexto proporcionado.
 
@@ -50,7 +50,7 @@ Recuerda: Solo usa la información del contexto anterior. Si no está ahí, no l
 
 // More conservative configuration for critical applications
 export const conservativeModelConfig: ModelConfig = {
-  modelName: 'gpt-4.1-nano',
+  modelName: 'gpt-3.5-turbo',
   temperature: 0.0,
   systemPrompt: `Eres un asistente que responde preguntas EXCLUSIVAMENTE basándote en el contexto de documentos proporcionado.
 
@@ -70,7 +70,7 @@ Contexto:
 // Available OpenAI models
 export const availableModels = [
   { id: 'gpt-4', name: 'GPT-4', description: 'Most capable model, best for complex tasks' },
-  { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', description: 'Faster and more efficient and more accurate than GPT-4' },
+  { id: 'gpt-3.5-turbo', name: 'GPT-4.1 Nano', description: 'Faster and more efficient and more accurate than GPT-4' },
   { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Fast and cost-effective for most tasks' },
   { id: 'gpt-3.5-turbo-16k', name: 'GPT-3.5 Turbo 16K', description: 'Extended context window version' },
 ];

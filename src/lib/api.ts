@@ -693,8 +693,8 @@ IMPORTANTE: Las instrucciones anteriores sobre usar el documento y contexto siem
           
           const chain = createChatChain(model, customRetriever, effectivePrompt);
           
-          // Get chat history for this user and store
-          const history = chatManager.chatHistoryManager.getChatHistory(userIdToUse, selectedStore, chatIdToUse);
+          // Get chat history for this user and store (legacy format for model processing)
+          const history = chatManager.chatHistoryManager.getChatHistoryLegacy(userIdToUse, selectedStore, chatIdToUse);
           const formattedHistory = formatChatHistory(history);
           
           // Generate AI response
@@ -913,12 +913,7 @@ IMPORTANTE: Las instrucciones anteriores sobre usar el documento y contexto siem
       userId,
       vectorName,
       chatId,
-      messages: chatHistory.map((exchange: [string, string], index: number) => ({
-        id: index,
-        question: exchange[0],
-        answer: exchange[1],
-        timestamp: new Date().toISOString()
-      }))
+      messages: chatHistory // Now directly return MessageExchange[] with real timestamps
     });
   });
 

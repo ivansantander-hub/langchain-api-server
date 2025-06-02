@@ -29,7 +29,7 @@ describe('model.ts', () => {
   describe('ModelConfig interface and defaults', () => {
     it('should have correct default model configuration', () => {
       expect(defaultModelConfig).toEqual({
-        modelName: 'gpt-4.1-nano',
+        modelName: 'gpt-3.5-turbo',
         temperature: 0.1,
         systemPrompt: expect.stringContaining('ÚNICAMENTE en el contexto proporcionado'),
         maxTokens: 1500,
@@ -46,7 +46,7 @@ describe('model.ts', () => {
 
     it('should have conservative model configuration', () => {
       expect(conservativeModelConfig).toEqual({
-        modelName: 'gpt-4.1-nano',
+        modelName: 'gpt-3.5-turbo',
         temperature: 0.0,
         systemPrompt: expect.stringContaining('EXCLUSIVAMENTE basándote en el contexto'),
         maxTokens: 1000,
@@ -72,7 +72,7 @@ describe('model.ts', () => {
     it('should contain expected OpenAI models', () => {
       expect(availableModels).toEqual([
         { id: 'gpt-4', name: 'GPT-4', description: 'Most capable model, best for complex tasks' },
-        { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', description: 'Faster and more efficient and more accurate than GPT-4' },
+        { id: 'gpt-3.5-turbo', name: 'GPT-4.1 Nano', description: 'Faster and more efficient and more accurate than GPT-4' },
         { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Fast and cost-effective for most tasks' },
         { id: 'gpt-3.5-turbo-16k', name: 'GPT-3.5 Turbo 16K', description: 'Extended context window version' },
       ]);
@@ -277,9 +277,9 @@ describe('model.ts', () => {
       expect(conservativeModelConfig.maxTokens).toBeLessThanOrEqual(1000);
     });
 
-    it('should use gpt-4.1-nano by default for better accuracy', () => {
-      expect(defaultModelConfig.modelName).toBe('gpt-4.1-nano');
-      expect(conservativeModelConfig.modelName).toBe('gpt-4.1-nano');
+    it('should use gpt-3.5-turbo by default for better accuracy', () => {
+      expect(defaultModelConfig.modelName).toBe('gpt-3.5-turbo');
+      expect(conservativeModelConfig.modelName).toBe('gpt-3.5-turbo');
     });
   });
 }); 

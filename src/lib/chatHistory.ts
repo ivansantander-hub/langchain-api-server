@@ -1,18 +1,30 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+// Interface for a single message exchange with timestamp
+export interface MessageExchange {
+  id: number;
+  question: string;
+  answer: string;
+  timestamp: string;
+  answerTimestamp?: string; // Optional for backward compatibility
+}
+
 // Interface for chat history context
 export interface ChatContext {
   userId: string;
   vectorName: string;
   chatId: string;
-  history: [string, string][];
+  history: MessageExchange[];
 }
+
+// Legacy format for backward compatibility
+export type LegacyHistory = [string, string][];
 
 // Class to manage chat histories for different users and chat sessions
 export class ChatHistoryManager {
   // Map structure: userId -> vectorName -> chatId -> history
-  private histories: Map<string, Map<string, Map<string, [string, string][]>>> = new Map();
+  private histories: Map<string, Map<string, Map<string, MessageExchange[]>>> = new Map();
   private baseDir: string = './chat-histories';
   
   constructor() {
@@ -24,11 +36,11 @@ export class ChatHistoryManager {
     this.loadAllHistories();
   }
   
-  // Get chat history for a specific user, vector store and chat
-  getChatHistory(userId: string, vectorName: string, chatId: string): [string, string][] {
+  // Get chat history for a specific user, vector store and chat (new format with timestamps)
+  getChatHistory(userId: string, vectorName: string, chatId: string): MessageExchange[] {
     // If user doesn't exist in the map, create an entry
     if (!this.histories.has(userId)) {
-      this.histories.set(userId, new Map<string, Map<string, [string, string][]>>());
+      this.histories.set(userId, new Map<string, Map<string, MessageExchange[]>>());
     }
     
     // Get the map for this user
@@ -36,7 +48,7 @@ export class ChatHistoryManager {
     
     // If vector store doesn't exist, create an entry
     if (!userHistories.has(vectorName)) {
-      userHistories.set(vectorName, new Map<string, [string, string][]>());
+      userHistories.set(vectorName, new Map<string, MessageExchange[]>());
     }
     
     // Get the map for this vector store
@@ -49,12 +61,18 @@ export class ChatHistoryManager {
     
     return vectorHistories.get(chatId)!;
   }
+
+  // Get chat history in legacy format for backward compatibility
+  getChatHistoryLegacy(userId: string, vectorName: string, chatId: string): LegacyHistory {
+    const history = this.getChatHistory(userId, vectorName, chatId);
+    return history.map(exchange => [exchange.question, exchange.answer]);
+  }
   
   // Update chat history for a specific user, vector store and chat
-  updateChatHistory(userId: string, vectorName: string, chatId: string, history: [string, string][]): void {
+  updateChatHistory(userId: string, vectorName: string, chatId: string, history: MessageExchange[]): void {
     // If user doesn't exist in the map, create an entry
     if (!this.histories.has(userId)) {
-      this.histories.set(userId, new Map<string, Map<string, [string, string][]>>());
+      this.histories.set(userId, new Map<string, Map<string, MessageExchange[]>>());
     }
     
     // Get the map for this user
@@ -62,7 +80,7 @@ export class ChatHistoryManager {
     
     // If vector store doesn't exist, create an entry
     if (!userHistories.has(vectorName)) {
-      userHistories.set(vectorName, new Map<string, [string, string][]>());
+      userHistories.set(vectorName, new Map<string, MessageExchange[]>());
     }
     
     // Get the map for this vector store
@@ -75,10 +93,21 @@ export class ChatHistoryManager {
     this.saveChatHistory(userId, vectorName, chatId);
   }
   
-  // Add a message exchange to chat history
+  // Add a message exchange to chat history with timestamps for both question and answer
   addExchange(userId: string, vectorName: string, chatId: string, question: string, answer: string): void {
     const history = this.getChatHistory(userId, vectorName, chatId);
-    history.push([question, answer]);
+    const now = new Date();
+    const questionTime = new Date(now.getTime() - 2000); // Question was sent 2 seconds ago
+    const answerTime = now; // Answer is now
+    
+    const newExchange: MessageExchange = {
+      id: history.length,
+      question: question,
+      answer: answer,
+      timestamp: questionTime.toISOString(),
+      answerTimestamp: answerTime.toISOString()
+    };
+    history.push(newExchange);
     this.updateChatHistory(userId, vectorName, chatId, history);
   }
   
@@ -119,24 +148,46 @@ export class ChatHistoryManager {
     fs.writeFileSync(filePath, JSON.stringify(history, null, 2));
   }
   
-  // Load a specific chat history from disk
+  // Load a specific chat history from disk with backward compatibility
   private loadChatHistory(userId: string, vectorName: string, chatId: string): void {
     const filePath = this.getChatHistoryPath(userId, vectorName, chatId);
     
     if (fs.existsSync(filePath)) {
       try {
         const fileContent = fs.readFileSync(filePath, 'utf-8');
-        const history = JSON.parse(fileContent) as [string, string][];
+        const rawHistory = JSON.parse(fileContent);
+        
+        let history: MessageExchange[];
+        
+        // Check if this is the new format (array of objects) or legacy format (array of arrays)
+        if (Array.isArray(rawHistory) && rawHistory.length > 0) {
+          if (typeof rawHistory[0] === 'object' && 'id' in rawHistory[0]) {
+            // New format - already MessageExchange[]
+            history = rawHistory as MessageExchange[];
+          } else {
+            // Legacy format - convert [string, string][] to MessageExchange[]
+            const legacyHistory = rawHistory as LegacyHistory;
+            history = legacyHistory.map((exchange, index) => ({
+              id: index,
+              question: exchange[0],
+              answer: exchange[1],
+              timestamp: new Date().toISOString() // Use current time for legacy data
+            }));
+          }
+        } else {
+          // Empty or invalid - create empty array
+          history = [];
+        }
         
         // Create user map if it doesn't exist
         if (!this.histories.has(userId)) {
-          this.histories.set(userId, new Map<string, Map<string, [string, string][]>>());
+          this.histories.set(userId, new Map<string, Map<string, MessageExchange[]>>());
         }
         
         // Create vector store map if it doesn't exist
         const userHistories = this.histories.get(userId)!;
         if (!userHistories.has(vectorName)) {
-          userHistories.set(vectorName, new Map<string, [string, string][]>());
+          userHistories.set(vectorName, new Map<string, MessageExchange[]>());
         }
         
         // Update the history
@@ -222,7 +273,7 @@ export class ChatHistoryManager {
     }
     
     const vectorHistories = userHistories.get(vectorName)!;
-    vectorHistories.set(chatId, []);
+    vectorHistories.set(chatId, [] as MessageExchange[]);
     
     // Save empty history to disk
     this.saveChatHistory(userId, vectorName, chatId);

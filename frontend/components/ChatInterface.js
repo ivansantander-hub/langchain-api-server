@@ -115,7 +115,7 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
                                         id: `${selectedChat.id}-assistant-${index}`,
                                         type: 'assistant',
                                         content: msg.answer,
-                                        timestamp: new Date(msg.timestamp || Date.now())
+                                        timestamp: new Date(msg.answerTimestamp || msg.timestamp || Date.now())
                                     });
                                 }
                             });
@@ -409,27 +409,30 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
         ];
     };
 
-    const addMessage = (type, content, sources = null, customId = null) => {
+    const addMessage = (type, content, sources = null, customId = null, realTimestamp = null) => {
         const message = {
             id: customId || window.apiClient.constructor.generateId(),
             type,
             content,
             sources,
-            timestamp: new Date()
+            timestamp: realTimestamp || new Date()
         };
         setMessages(prev => [...prev, message]);
         return message;
     };
 
     const addSystemMessage = (content) => {
-        return addMessage('system', content);
+        return addMessage('system', content, null, null, new Date());
     };
 
     const sendMessage = async (messageText) => {
         if (!messageText.trim() || !isConnected || !selectedUser) return;
 
-        // Agregar mensaje del usuario
-        addMessage('user', messageText);
+        // Capturar timestamp real del momento del envío
+        const userMessageTimestamp = new Date();
+        
+        // Agregar mensaje del usuario con timestamp real
+        addMessage('user', messageText, null, null, userMessageTimestamp);
         setInputValue('');
         setIsLoading(true);
 
@@ -465,7 +468,55 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
 
             // Usar método de chat regular (sin streaming)
             const response = await window.apiClient.sendMessage(messageText, apiOptions);
-            addMessage('assistant', response.answer, response.sources);
+            
+            // Capturar timestamp real de la respuesta
+            const assistantMessageTimestamp = new Date();
+            
+            // Agregar mensaje del asistente con timestamp real
+            addMessage('assistant', response.answer, response.sources, null, assistantMessageTimestamp);
+
+            // Después de enviar el mensaje, recargar el historial del servidor para obtener timestamps exactos
+            setTimeout(async () => {
+                try {
+                    const historyResponse = await window.apiClient.getChatMessages(
+                        selectedUser,
+                        vectorStoreToUse,
+                        chatIdToUse
+                    );
+                    
+                    if (historyResponse.messages && historyResponse.messages.length > 0) {
+                        // Obtener los dos últimos mensajes (pregunta y respuesta)
+                        const serverMessages = historyResponse.messages.slice(-1)[0]; // Último intercambio
+                        
+                        if (serverMessages && serverMessages.question && serverMessages.answer) {
+                            // Actualizar solo los timestamps de los mensajes más recientes
+                            setMessages(prevMessages => {
+                                const updatedMessages = [...prevMessages];
+                                const userMsgIndex = updatedMessages.length - 2; // Penúltimo mensaje (usuario)
+                                const assistantMsgIndex = updatedMessages.length - 1; // Último mensaje (asistente)
+                                
+                                if (userMsgIndex >= 0 && updatedMessages[userMsgIndex].type === 'user') {
+                                    updatedMessages[userMsgIndex] = {
+                                        ...updatedMessages[userMsgIndex],
+                                        timestamp: new Date(serverMessages.timestamp)
+                                    };
+                                }
+                                
+                                if (assistantMsgIndex >= 0 && updatedMessages[assistantMsgIndex].type === 'assistant') {
+                                    updatedMessages[assistantMsgIndex] = {
+                                        ...updatedMessages[assistantMsgIndex],
+                                        timestamp: new Date(serverMessages.answerTimestamp || serverMessages.timestamp)
+                                    };
+                                }
+                                
+                                return updatedMessages;
+                            });
+                        }
+                    }
+                } catch (err) {
+                    console.warn('No se pudieron actualizar los timestamps del servidor:', err);
+                }
+            }, 500); // Esperar un poco para que el servidor procese completamente
 
             // Si es un nuevo chat, notificar al componente padre
             if (selectedChat && selectedChat.preview === 'Chat nuevo - Sin mensajes') {

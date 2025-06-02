@@ -79,10 +79,36 @@ const ChatMessage = ({ message, timestamp }) => {
     const { type, content, sources } = message;
 
     const formatTimestamp = (date) => {
-        return new Date(date).toLocaleTimeString('es-ES', {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        if (!date) return '';
+        
+        const msgDate = new Date(date);
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const msgDay = new Date(msgDate.getFullYear(), msgDate.getMonth(), msgDate.getDate());
+        
+        // Si es hoy, solo mostrar hora
+        if (msgDay.getTime() === today.getTime()) {
+            return msgDate.toLocaleTimeString('es-ES', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        } 
+        // Si es ayer
+        else if (msgDay.getTime() === today.getTime() - 86400000) {
+            return `Ayer ${msgDate.toLocaleTimeString('es-ES', {
+                hour: '2-digit',
+                minute: '2-digit'
+            })}`;
+        }
+        // Si es otro día
+        else {
+            return msgDate.toLocaleString('es-ES', {
+                day: '2-digit',
+                month: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
     };
 
     const renderSources = () => {
