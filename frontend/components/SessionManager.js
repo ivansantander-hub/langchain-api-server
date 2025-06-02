@@ -84,10 +84,10 @@ const SessionManager = () => {
     return (
         <div className="session-manager">
             <div className="section-header" onClick={() => setIsExpanded(!isExpanded)}>
-                <h3>
+                <span className="expand-label">
                     <i className="fas fa-save"></i>
-                    Sesión Guardada
-                </h3>
+                    Ver detalles de sesión guardada
+                </span>
                 <button className="expand-button">
                     <i className={`fas fa-chevron-${isExpanded ? 'up' : 'down'}`}></i>
                 </button>

@@ -476,8 +476,12 @@ const App = () => {
                     </div>
                     
                     <div className="tools-sidebar-content">
-                    {/* Vector Store Selector */}
+                    {/* Base de Conocimiento */}
                     <section className="sidebar-section">
+                        <h3>
+                            <i className="fas fa-database"></i>
+                            Base de Conocimiento
+                        </h3>
                         <window.VectorStoreSelector
                             vectorStores={combinedStores}
                             selectedStore={selectedVectorStore}
@@ -487,32 +491,21 @@ const App = () => {
                         />
                     </section>
 
-                    {/* User Document Manager */}
+                    {/* Subir Documentos */}
                     <section className="sidebar-section">
-                        <window.UserDocumentManager
+                        <window.SimpleDocumentUploader
                             userId={selectedUser}
-                            onDocumentReady={handleDocumentReady}
+                            onDocumentUploaded={handleDocumentReady}
                         />
                     </section>
 
-                    {/* Legacy Document Manager (for system documents) */}
+                    {/* Gestión de Sesión */}
                     <section className="sidebar-section">
-                        <window.DocumentManager
-                            onDocumentUploaded={handleDocumentUploaded}
-                            isLoading={isLoading}
-                        />
-                    </section>
-
-                    {/* Session Manager */}
-                    <section className="sidebar-section">
+                        <h3>
+                            <i className="fas fa-history"></i>
+                            Gestión de Sesión
+                        </h3>
                         <window.SessionManager />
-                    </section>
-
-                    {/* Document Stats */}
-                    <section className="sidebar-section">
-                        <window.DocumentStats
-                            vectorStores={vectorStores}
-                        />
                     </section>
                     </div>
                 </aside>

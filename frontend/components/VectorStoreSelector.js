@@ -53,18 +53,12 @@ const VectorStoreSelector = ({ vectorStores, selectedStore, onStoreChange, isLoa
 
     return (
         <div className="vector-store-selector">
-            <div className="selector-header">
-                <h3>
-                    <i className="fas fa-database"></i>
-                    Base de Conocimiento
-                </h3>
-                {selectedUser && (
-                    <div className="user-badge">
-                        <i className="fas fa-user"></i>
-                        {selectedUser}
-                    </div>
-                )}
-            </div>
+            {selectedUser && (
+                <div className="user-badge">
+                    <i className="fas fa-user"></i>
+                    {selectedUser}
+                </div>
+            )}
             
             <select 
                 className="store-select"
