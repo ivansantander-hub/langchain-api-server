@@ -1,5 +1,5 @@
 // Componente principal de la interfaz de chat
-const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConnected }) => {
+const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConnected, selectedDocument }) => {
     const [messages, setMessages] = React.useState([]);
     const [inputValue, setInputValue] = React.useState('');
     const [isLoading, setIsLoading] = React.useState(false);
@@ -14,6 +14,9 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
     // Estado para configuración del modelo
     const [modelConfig, setModelConfig] = React.useState(null);
     const [modelConfigComponent, setModelConfigComponent] = React.useState(null);
+
+    // Estado para documento específico seleccionado
+    const [currentDocument, setCurrentDocument] = React.useState(selectedDocument || null);
 
     React.useEffect(() => {
         scrollToBottom();
@@ -45,6 +48,15 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
             addSystemMessage(`Conectado a: ${getStoreDisplayName(selectedVectorStore)}`);
         }
     }, [selectedVectorStore]);
+
+    // Efecto para actualizar documento seleccionado
+    React.useEffect(() => {
+        setCurrentDocument(selectedDocument || null);
+        if (selectedDocument) {
+            console.log(`Documento específico seleccionado: ${selectedDocument.filename}`);
+            addSystemMessage(`Documento específico cargado: ${selectedDocument.filename}`);
+        }
+    }, [selectedDocument]);
 
     // Efecto para generar quick actions cuando cambia el vector store
     React.useEffect(() => {
@@ -167,6 +179,11 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
     };
 
     const getStoreDisplayName = (storeName) => {
+        // Si hay un documento específico seleccionado, mostrarlo
+        if (currentDocument && currentDocument.filename) {
+            return `Documento: ${currentDocument.filename}`;
+        }
+        
         switch (storeName) {
             case 'combined':
                 return 'Todos los Documentos';
@@ -434,6 +451,12 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
                 userId: selectedUser,
                 chatId: chatIdToUse
             };
+
+            // Si hay un documento específico seleccionado, usarlo
+            if (currentDocument && currentDocument.filename) {
+                apiOptions.filename = currentDocument.filename;
+                console.log(`Enviando mensaje con documento específico: ${currentDocument.filename}`);
+            }
 
             // Incluir configuración del modelo si está disponible
             if (modelConfig) {

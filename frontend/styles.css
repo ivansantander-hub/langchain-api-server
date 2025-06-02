@@ -3380,4 +3380,254 @@ body {
         width: 100%;
         justify-content: center;
     }
+}
+
+/* Session Manager Styles */
+.session-manager {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+}
+
+.session-manager .section-header {
+    padding: 0.75rem;
+    background: var(--surface-color);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: var(--transition);
+}
+
+.session-manager .section-header:hover {
+    background: var(--bg-color);
+}
+
+.session-manager .section-header h3 {
+    margin: 0;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-color);
+}
+
+.session-manager .section-header h3 i {
+    color: var(--accent-color);
+}
+
+.session-manager .expand-button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: var(--border-radius);
+    transition: var(--transition);
+}
+
+.session-manager .expand-button:hover {
+    background: var(--bg-color);
+    color: var(--text-color);
+}
+
+.session-content {
+    padding: 0.75rem;
+    background: var(--bg-color);
+    border-top: 1px solid var(--border-color);
+}
+
+.session-info {
+    margin-bottom: 0.75rem;
+}
+
+.session-manager .info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    font-size: 0.8rem;
+}
+
+.session-manager .info-item:last-child {
+    margin-bottom: 0;
+}
+
+.session-manager .info-item label {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.session-manager .info-item label i {
+    width: 12px;
+    text-align: center;
+}
+
+.session-manager .has-data {
+    color: var(--success-color);
+    font-weight: 500;
+}
+
+.session-manager .no-data {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.session-manager .timestamp {
+    color: var(--text-color);
+    font-size: 0.75rem;
+}
+
+.session-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.session-manager .action-btn {
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    background: var(--surface-color);
+    color: var(--text-color);
+    cursor: pointer;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    transition: var(--transition);
+    text-decoration: none;
+    flex: 1;
+    justify-content: center;
+}
+
+.session-manager .action-btn:hover {
+    background: var(--bg-color);
+    border-color: var(--accent-color);
+}
+
+.session-manager .export-btn:hover {
+    border-color: var(--success-color);
+    color: var(--success-color);
+}
+
+.session-manager .import-btn:hover {
+    border-color: var(--info-color);
+    color: var(--info-color);
+}
+
+.session-manager .clear-btn:hover {
+    border-color: var(--error-color);
+    color: var(--error-color);
+}
+
+/* Document Stats Styles */
+.document-stats {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+}
+
+.document-stats .section-header {
+    padding: 0.75rem;
+    background: var(--surface-color);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: var(--transition);
+}
+
+.document-stats .section-header:hover {
+    background: var(--bg-color);
+}
+
+.document-stats .section-header h3 {
+    margin: 0;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-color);
+}
+
+.document-stats .section-header h3 i {
+    color: var(--accent-color);
+}
+
+.document-stats .expand-button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: var(--border-radius);
+    transition: var(--transition);
+}
+
+.document-stats .expand-button:hover {
+    background: var(--bg-color);
+    color: var(--text-color);
+}
+
+.stats-content {
+    padding: 0.75rem;
+    background: var(--bg-color);
+    border-top: 1px solid var(--border-color);
+}
+
+.document-stats .no-stats {
+    text-align: center;
+    padding: 1rem;
+    color: var(--text-muted);
+}
+
+.document-stats .no-stats i {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    opacity: 0.5;
+}
+
+.document-stats .no-stats p {
+    margin: 0;
+    font-size: 0.85rem;
+}
+
+.document-list {
+    list-style: none;
+    padding: 0;
+    margin: 0.5rem 0 0 0;
+}
+
+.document-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0;
+    font-size: 0.8rem;
+    color: var(--text-color);
+}
+
+.document-item i {
+    color: var(--accent-color);
+    width: 12px;
+}
+
+.stats-footer {
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+}
+
+.stats-footer small {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
 } 

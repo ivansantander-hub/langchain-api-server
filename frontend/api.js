@@ -1,8 +1,8 @@
 // API Client para LangChain Document Chat
 class APIClient {
     constructor() {
-        this.baseURL = 'http://localhost:3000';
-        // this.baseURL = 'https://langchain-api-server-production.up.railway.app';
+        // this.baseURL = 'http://localhost:3000';
+        this.baseURL = 'https://langchain-api-server-production.up.railway.app';
         this.defaultUserId = 'web-client';
         this.defaultChatId = 'default';
         console.log('🚀 ~ APIClient ~ constructor ~ this.baseURL:', this.baseURL)
@@ -41,13 +41,51 @@ class APIClient {
         return this.request('/api/vector-stores');
     }
 
-    // Send message to chat
+    // ===== NUEVOS MÉTODOS PARA GESTIÓN DE ARCHIVOS POR USUARIO =====
+
+    // Subir archivo de texto (sin vectorización)
+    async uploadFile(userId, filename, content) {
+        return this.request('/api/upload-file', {
+            method: 'POST',
+            body: JSON.stringify({
+                userId,
+                filename,
+                content
+            })
+        });
+    }
+
+    // Vectorizar archivo ya subido
+    async vectorizeFile(userId, filename) {
+        return this.request('/api/load-vector', {
+            method: 'POST',
+            body: JSON.stringify({
+                userId,
+                filename
+            })
+        });
+    }
+
+    // Obtener archivos de un usuario
+    async getUserFiles(userId) {
+        return this.request(`/api/users/${userId}/files`);
+    }
+
+    // Obtener vector stores de un usuario 
+    async getUserVectorStores(userId) {
+        return this.request(`/api/users/${userId}/vector-stores`);
+    }
+
+    // ===== MÉTODOS DE CHAT MEJORADOS =====
+
+    // Send message to chat with support for user documents
     async sendMessage(message, options = {}) {
         const {
             vectorStore = 'combined',
             userId = this.defaultUserId,
             chatId = this.defaultChatId,
-            modelConfig = null
+            modelConfig = null,
+            filename = null // Nuevo: para chat con documento específico
         } = options;
 
         const requestBody = {
@@ -56,6 +94,11 @@ class APIClient {
             userId,
             chatId
         };
+
+        // Agregar filename si se especifica (para chat con documento específico)
+        if (filename) {
+            requestBody.filename = filename;
+        }
 
         if (modelConfig) {
             requestBody.modelConfig = modelConfig;
@@ -67,8 +110,11 @@ class APIClient {
         });
     }
 
-    // Upload document
+    // ===== MÉTODOS LEGACY (MANTENIDOS PARA COMPATIBILIDAD) =====
+
+    // Upload document (legacy - ahora usa el flujo de uploadFile + vectorizeFile)
     async uploadDocument(filename, content) {
+        // Por compatibilidad, usar el endpoint legacy
         return this.request('/api/add-document', {
             method: 'POST',
             body: JSON.stringify({
@@ -77,6 +123,8 @@ class APIClient {
             })
         });
     }
+
+    // ===== MÉTODOS DE GESTIÓN DE USUARIOS Y CHATS =====
 
     // Get list of users
     async getUsers() {
@@ -101,17 +149,6 @@ class APIClient {
         } catch (error) {
             console.error('Error creating user:', error);
             throw new Error(`No se pudo crear el usuario: ${error.message}`);
-        }
-    }
-
-    // Get vector stores of a user
-    async getUserVectorStores(userId) {
-        try {
-            const response = await this.request(`/api/users/${userId}/vector-stores`);
-            return response;
-        } catch (error) {
-            console.error(`Error getting vector stores for user ${userId}:`, error);
-            return { vectorStores: [] };
         }
     }
 
@@ -159,6 +196,8 @@ class APIClient {
             throw new Error(`No se pudo eliminar el historial del chat: ${error.message}`);
         }
     }
+
+    // ===== MÉTODOS DE UTILIDAD =====
 
     // Check connection with the server
     async checkConnection() {

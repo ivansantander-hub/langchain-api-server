@@ -12,6 +12,9 @@ const App = () => {
     const [selectedUser, setSelectedUser] = useState(null);
     const [selectedChat, setSelectedChat] = useState(null);
     
+    // State for document-specific chat
+    const [selectedDocument, setSelectedDocument] = useState(null);
+    
     // State for collapsable sidebar
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -147,6 +150,23 @@ const App = () => {
         // Save chat in localStorage
         if (chat) {
             window.StorageUtils.saveLastChat(chat);
+        }
+    };
+
+    const handleDocumentReady = (document) => {
+        setSelectedDocument(document);
+        
+        // Opcional: crear automáticamente un nuevo chat para este documento
+        if (document && document.ready) {
+            const documentChat = {
+                id: `doc-${Date.now()}`,
+                vectorStore: document.filename,
+                displayName: `Chat con ${document.filename}`,
+                preview: 'Chat con documento específico',
+                isDocumentChat: true,
+                filename: document.filename
+            };
+            setSelectedChat(documentChat);
         }
     };
 
@@ -295,6 +315,7 @@ const App = () => {
                                 selectedUser={selectedUser}
                                 selectedChat={selectedChat}
                                 isConnected={isConnected}
+                                selectedDocument={selectedDocument}
                             />
                         ) : (
                             <div className="welcome-message">
@@ -346,7 +367,15 @@ const App = () => {
                         />
                     </section>
 
-                    {/* Document Manager */}
+                    {/* User Document Manager */}
+                    <section className="sidebar-section">
+                        <window.UserDocumentManager
+                            userId={selectedUser}
+                            onDocumentReady={handleDocumentReady}
+                        />
+                    </section>
+
+                    {/* Legacy Document Manager (for system documents) */}
                     <section className="sidebar-section">
                         <window.DocumentManager
                             onDocumentUploaded={handleDocumentUploaded}
