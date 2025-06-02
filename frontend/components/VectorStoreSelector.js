@@ -81,17 +81,9 @@ const VectorStoreSelector = ({ vectorStores, selectedStore, onStoreChange, isLoa
         );
     }
 
-    // Buscar el store actualmente seleccionado
-    const currentStore = userVectorStores.find(store => store.value === selectedStore);
-    const currentLabel = currentStore ? currentStore.label : 'Seleccionar documento';
-
     return (
         <div className="vector-store-selector">
             <div className="document-selector">
-                <label htmlFor="store-select" className="selector-label">
-                    <i className="fas fa-file-alt"></i>
-                    Documento activo
-                </label>
                 <select 
                     id="store-select"
                     className="modern-select" 
@@ -106,13 +98,6 @@ const VectorStoreSelector = ({ vectorStores, selectedStore, onStoreChange, isLoa
                         </option>
                     ))}
                 </select>
-                
-                {selectedStore && currentStore && (
-                    <div className="selection-info">
-                        <i className="fas fa-check-circle"></i>
-                        <span>Contexto: {currentStore.label}</span>
-                    </div>
-                )}
             </div>
         </div>
     );
