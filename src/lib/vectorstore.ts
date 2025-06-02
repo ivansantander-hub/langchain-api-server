@@ -219,14 +219,31 @@ export class EnhancedVectorStoreManager {
 
   // Advanced retriever with multiple strategies
   getAdvancedRetriever(storeName: string, config: RetrieverConfig = { k: 8, searchType: 'advanced' }) {
-    const store = this.vectorStores.get(storeName);
-    if (!store) {
-      throw new Error(`Vector store ${storeName} not found. Load it first.`);
-    }
-
     return {
       getRelevantDocuments: async (query: string): Promise<Document[]> => {
         try {
+          // Try to get store from memory first
+          let store = this.vectorStores.get(storeName);
+          
+          // If not in memory, try to load it
+          if (!store) {
+            const storePath = path.join(this.baseDir, storeName);
+            
+            if (!fs.existsSync(storePath)) {
+              throw new Error(`Vector store ${storeName} not found. Load it first.`);
+            }
+
+            console.log(`Loading vector store: ${storeName} from ${storePath}`);
+            try {
+              store = await HNSWLib.load(storePath, this.embeddings);
+              this.vectorStores.set(storeName, store);
+              console.log(`Successfully loaded vector store: ${storeName}`);
+            } catch (loadError) {
+              console.error(`Failed to load vector store ${storeName}:`, loadError);
+              throw new Error(`Vector store ${storeName} not found. Load it first.`);
+            }
+          }
+
           console.log(`Searching in store ${storeName} for: "${query.substring(0, 50)}..."`);
           
           if (config.searchType === 'advanced') {
@@ -238,8 +255,7 @@ export class EnhancedVectorStoreManager {
           }
         } catch (error) {
           console.error('Error in advanced retriever:', error);
-          // Fallback to basic similarity search
-          return await store.similaritySearch(query, Math.min(config.k, 10));
+          throw error;
         }
       }
     };

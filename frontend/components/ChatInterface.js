@@ -53,8 +53,13 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
     React.useEffect(() => {
         setCurrentDocument(selectedDocument || null);
         if (selectedDocument) {
-            console.log(`Documento específico seleccionado: ${selectedDocument.filename}`);
-            addSystemMessage(`Documento específico cargado: ${selectedDocument.filename}`);
+            if (selectedDocument.allDocuments) {
+                console.log(`Todos los documentos seleccionados para usuario: ${selectedDocument.userId}`);
+                addSystemMessage(`Modo: Todos los documentos del usuario`);
+            } else {
+                console.log(`Documento específico seleccionado: ${selectedDocument.filename}`);
+                addSystemMessage(`Documento específico cargado: ${selectedDocument.filename}`);
+            }
         }
     }, [selectedDocument]);
 
@@ -91,7 +96,7 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
                     if (selectedChat.preview !== 'Chat nuevo - Sin mensajes') {
                         const response = await window.apiClient.getChatMessages(
                             selectedUser,
-                            selectedChat.vectorStore,
+                            'combined', // SIEMPRE usar combined para historial
                             selectedChat.id
                         );
                         
@@ -180,8 +185,12 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
 
     const getStoreDisplayName = (storeName) => {
         // Si hay un documento específico seleccionado, mostrarlo
-        if (currentDocument && currentDocument.filename) {
-            return `Documento: ${currentDocument.filename}`;
+        if (currentDocument) {
+            if (currentDocument.allDocuments) {
+                return 'Todos mis Documentos';
+            } else if (currentDocument.filename) {
+                return `Documento: ${currentDocument.filename}`;
+            }
         }
         
         switch (storeName) {
@@ -456,9 +465,14 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
             };
 
             // Si hay un documento específico seleccionado, usarlo
-            if (currentDocument && currentDocument.filename) {
-                apiOptions.filename = currentDocument.filename;
-                console.log(`Enviando mensaje con documento específico: ${currentDocument.filename}`);
+            if (currentDocument) {
+                if (currentDocument.allDocuments) {
+                    // No se pasa filename cuando es "todos los documentos"
+                    console.log(`Enviando mensaje con todos los documentos del usuario: ${currentDocument.userId}`);
+                } else if (currentDocument.filename) {
+                    apiOptions.filename = currentDocument.filename;
+                    console.log(`Enviando mensaje con documento específico: ${currentDocument.filename}`);
+                }
             }
 
             // Incluir configuración del modelo si está disponible
@@ -480,7 +494,7 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
                 try {
                     const historyResponse = await window.apiClient.getChatMessages(
                         selectedUser,
-                        vectorStoreToUse,
+                        'combined', // SIEMPRE usar combined para historial
                         chatIdToUse
                     );
                     
@@ -524,7 +538,7 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
                     detail: {
                         chatId: selectedChat.id,
                         userId: selectedUser,
-                        vectorStore: vectorStoreToUse,
+                        vectorStore: 'combined', // SIEMPRE usar combined para historial
                         firstMessage: messageText.slice(0, 50) + (messageText.length > 50 ? '...' : '')
                     }
                 }));

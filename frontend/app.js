@@ -183,17 +183,38 @@ const App = () => {
     };
 
     const handleVectorStoreChange = (newStore, additionalInfo = null) => {
-        setSelectedVectorStore(newStore);
+        // Generar nuevo chat ID cuando cambia de documento/store
+        const newChatId = window.apiClient.constructor.generateId();
         
-        // Siempre actualizar selectedDocument para documentos de usuario
-        if (additionalInfo && additionalInfo.filename && additionalInfo.userId) {
+        setSelectedVectorStore(newStore);
+        setCurrentChatId(newChatId);
+        
+        // Limpiar mensajes del chat anterior
+        setMessages([]);
+        
+        // Manejar diferentes tipos de selección
+        if (additionalInfo && additionalInfo.allDocuments) {
+            // Todos los documentos del usuario
+            setSelectedDocument({
+                userId: additionalInfo.userId,
+                filename: null, // No hay archivo específico
+                ready: true,
+                allDocuments: true
+            });
+            console.log(`Cambiado a TODOS los documentos del usuario ${additionalInfo.userId}, nuevo chat: ${newChatId}`);
+        } else if (additionalInfo && additionalInfo.filename && additionalInfo.userId) {
+            // Documento específico del usuario
             setSelectedDocument({
                 userId: additionalInfo.userId,
                 filename: additionalInfo.filename,
-                ready: true
+                ready: true,
+                allDocuments: false
             });
+            console.log(`Cambiado a documento ${additionalInfo.filename}, nuevo chat: ${newChatId}`);
         } else {
+            // Sin documento seleccionado (caso por defecto)
             setSelectedDocument(null);
+            console.log(`Cambiado a ${newStore}, nuevo chat: ${newChatId}`);
         }
     };
 

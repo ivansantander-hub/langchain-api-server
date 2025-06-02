@@ -720,17 +720,69 @@ export function createApiServer(
           });
         }
       } else if (vectorStore) {
-        // Validate if provided vectorStore exists (legacy stores)
-        if (!vectorStoreManager.storeExists(vectorStore)) {
-          const availableStores = vectorStoreManager.getAvailableStores();
-          console.log(`Vector store "${vectorStore}" not found. Available stores:`, availableStores);
-          return res.status(404).json({ 
-            error: `Vector store "${vectorStore}" not found`,
-            available: availableStores,
-            message: availableStores.length > 0 ? 
-              `Available stores: ${availableStores.join(', ')}` : 
-              'No vector stores available. Upload documents to create them.'
-          });
+        // First, check if this is a user vector store for the provided userId
+        if (userId) {
+          const userVectorStores = enhancedVectorManager.listUserVectorStores(userId);
+          const userVectorStoreExists = userVectorStores.includes(vectorStore);
+          
+          if (userVectorStoreExists) {
+            // For user vector stores, we need to use the full name with userId prefix
+            selectedStore = `${userId}_${vectorStore}`;
+            usingUserStore = true;
+            console.log(`Using user vector store: ${selectedStore} for user: ${userId}`);
+          } else {
+            // Check if vectorStore has user format (userId_documentName)
+            const userStoreMatch = vectorStore.match(/^([^_]+)_(.+)$/);
+            if (userStoreMatch) {
+              const [, vectorUserId, documentName] = userStoreMatch;
+              console.log(`Detected user vector store format: userId=${vectorUserId}, documentName=${documentName}`);
+              
+              // Check if this user vector store exists
+              const userVectorStoresForDetectedUser = enhancedVectorManager.listUserVectorStores(vectorUserId);
+              const userVectorStoreExistsForDetectedUser = userVectorStoresForDetectedUser.includes(vectorStore);
+              
+              if (userVectorStoreExistsForDetectedUser) {
+                selectedStore = vectorStore;
+                usingUserStore = true;
+                console.log(`Using user vector store: ${selectedStore} for detected user: ${vectorUserId}`);
+              } else {
+                console.log(`User vector store "${vectorStore}" not found. Available user stores for ${vectorUserId}:`, userVectorStoresForDetectedUser);
+                return res.status(404).json({ 
+                  error: `Vector store "${vectorStore}" not found for user "${vectorUserId}". Vectorize the file first using /api/load-vector`,
+                  available: userVectorStoresForDetectedUser,
+                  suggestion: 'Use /api/load-vector to vectorize your uploaded file first'
+                });
+              }
+            } else {
+              // Not a user store for this user, check legacy stores
+              if (!vectorStoreManager.storeExists(vectorStore)) {
+                const availableStores = vectorStoreManager.getAvailableStores();
+                console.log(`Vector store "${vectorStore}" not found. Available legacy stores:`, availableStores);
+                console.log(`Available user stores for ${userId}:`, userVectorStores);
+                return res.status(404).json({ 
+                  error: `Vector store "${vectorStore}" not found`,
+                  available: availableStores,
+                  userStores: userVectorStores,
+                  message: availableStores.length > 0 ? 
+                    `Available stores: ${availableStores.join(', ')}` : 
+                    'No vector stores available. Upload documents to create them.'
+                });
+              }
+            }
+          }
+        } else {
+          // No userId provided, check legacy stores only
+          if (!vectorStoreManager.storeExists(vectorStore)) {
+            const availableStores = vectorStoreManager.getAvailableStores();
+            console.log(`Vector store "${vectorStore}" not found. Available stores:`, availableStores);
+            return res.status(404).json({ 
+              error: `Vector store "${vectorStore}" not found`,
+              available: availableStores,
+              message: availableStores.length > 0 ? 
+                `Available stores: ${availableStores.join(', ')}` : 
+                'No vector stores available. Upload documents to create them.'
+            });
+          }
         }
       }
 
@@ -740,10 +792,22 @@ export function createApiServer(
       
       if (usingUserStore) {
         // Use enhanced vector manager for user stores with proper AI chat
-        const userVectorStore = await enhancedVectorManager.getUserVectorStore(userId!, filename!);
-        if (!userVectorStore) {
-          throw new Error('User vector store became unavailable');
+        let actualUserId = userId;
+        let actualFilename = filename;
+        
+        // If we detected from vectorStore format, extract userId and filename
+        if (!actualUserId || !actualFilename) {
+          const userStoreMatch = selectedStore.match(/^([^_]+)_(.+)$/);
+          if (userStoreMatch) {
+            const [, vectorUserId, documentName] = userStoreMatch;
+            actualUserId = actualUserId || vectorUserId;
+            
+            // Use document name with potential extensions for filename
+            actualFilename = actualFilename || documentName + '.txt'; // fallback with .txt extension
+          }
         }
+        
+        console.log(`Using user vector store with userId: ${actualUserId}, filename: ${actualFilename}`);
         
         // Get relevant documents first
         const retriever = enhancedVectorManager.getAdvancedRetriever(selectedStore, {
@@ -758,7 +822,7 @@ export function createApiServer(
         if (relevantDocs.length === 0) {
           // If no relevant docs found, provide a helpful response
           response = {
-            text: `No encontré información específica sobre "${question}" en el documento "${filename}". El documento parece contener otro tipo de información. ¿Podrías reformular tu pregunta o preguntarme sobre el contenido general del documento?`,
+            text: `No encontré información específica sobre "${question}" en el documento "${actualFilename}". El documento parece contener otro tipo de información. ¿Podrías reformular tu pregunta o preguntarme sobre el contenido general del documento?`,
             sourceDocuments: []
           };
         } else {
@@ -786,7 +850,7 @@ export function createApiServer(
           // Create a specialized prompt that combines user preferences with document handling
           let effectivePrompt = `Eres un asistente de IA experto en análisis de documentos.
 
-TIENES ACCESO COMPLETO al documento "${escapeTemplateChars(filename)}" del usuario y DEBES usar esta información para responder.
+TIENES ACCESO COMPLETO al documento "${escapeTemplateChars(actualFilename)}" del usuario y DEBES usar esta información para responder.
 
 CONTEXTO DEL DOCUMENTO:
 ${documentContext}

@@ -1,1 +1,0 @@
-Algunos discos duros modernos usan una técnica llamada Shingled Magnetic Recording (SMR), donde las pistas se superponen como tejas para guardar más datos, pero esto puede hacerlos lentos al escribir. — Escrito por Jebus Tercero

@@ -64,8 +64,10 @@ export class ChatHistoryManager {
   }
 
   // Get chat history in legacy format for backward compatibility
+  // IMPORTANTE: Siempre usar 'combined' para el historial
   getChatHistoryLegacy(userId: string, vectorName: string, chatId: string): LegacyHistory {
-    const history = this.getChatHistory(userId, vectorName, chatId);
+    const historyVectorName = 'combined';
+    const history = this.getChatHistory(userId, historyVectorName, chatId);
     return history.map(exchange => [exchange.question, exchange.answer]);
   }
   
@@ -95,8 +97,11 @@ export class ChatHistoryManager {
   }
   
   // Add a message exchange to chat history with timestamps for both question and answer
+  // IMPORTANTE: Siempre usar 'combined' para el historial, independientemente del vectorStore usado para contexto
   addExchange(userId: string, vectorName: string, chatId: string, question: string, answer: string): void {
-    const history = this.getChatHistory(userId, vectorName, chatId);
+    // FORZAR el uso de 'combined' para el historial
+    const historyVectorName = 'combined';
+    const history = this.getChatHistory(userId, historyVectorName, chatId);
     const now = new Date();
     const questionTime = new Date(now.getTime() - 2000); // Question was sent 2 seconds ago
     const answerTime = now; // Answer is now
@@ -109,7 +114,7 @@ export class ChatHistoryManager {
       answerTimestamp: answerTime.toISOString()
     };
     history.push(newExchange);
-    this.updateChatHistory(userId, vectorName, chatId, history);
+    this.updateChatHistory(userId, historyVectorName, chatId, history);
   }
   
   // Get the directory path for a user
@@ -343,7 +348,9 @@ export class ChatHistoryManager {
   }
   
   // Clear chat history for a specific user, vector store, and chat
+  // IMPORTANTE: Siempre usar 'combined' para el historial
   clearChatHistory(userId: string, vectorName: string, chatId: string): void {
+    const historyVectorName = 'combined';
     if (!this.histories.has(userId)) {
       return;
     }
@@ -354,10 +361,10 @@ export class ChatHistoryManager {
     }
     
     const chatHistories = userHistories.get(chatId)!;
-    chatHistories.set(vectorName, []);
+    chatHistories.set(historyVectorName, []);
     
     // Save empty history to disk
-    this.saveChatHistory(userId, vectorName, chatId);
+    this.saveChatHistory(userId, historyVectorName, chatId);
   }
   
   // Delete entire chat (all vector stores for a chat)

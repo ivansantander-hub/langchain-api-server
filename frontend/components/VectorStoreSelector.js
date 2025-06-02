@@ -6,7 +6,14 @@ const VectorStoreSelector = ({ vectorStores, selectedStore, onStoreChange, isLoa
     // Solo mostrar documentos del usuario
     const userStores = storesArray.filter(store => store.type === 'user');
     
-    // Encontrar el store seleccionado (buscar por nombre sin extensión para documentos de usuario)
+    // Encontrar el store seleccionado (manejar casos especiales)
+    let displaySelectedStore = selectedStore;
+    if (selectedStore === 'combined') {
+        // Si selectedStore es 'combined', podría ser "todos los documentos"
+        displaySelectedStore = 'user-combined';
+    }
+    
+    // Buscar por nombre sin extensión para documentos de usuario
     const selectedStoreObj = userStores.find(store => {
         const docName = store.name.replace(/\.[^/.]+$/, "");
         return docName === selectedStore || store.id === selectedStore;
@@ -15,22 +22,32 @@ const VectorStoreSelector = ({ vectorStores, selectedStore, onStoreChange, isLoa
     const handleStoreChange = (e) => {
         const selectedValue = e.target.value;
         
-        // Buscar el store por el nombre del documento (sin extensión)
-        const store = userStores.find(s => {
-            const docName = s.name.replace(/\.[^/.]+$/, "");
-            return docName === selectedValue;
-        });
-        
-        if (store) {
-            // Enviar solo el nombre del documento (sin userId_ y sin extensión)
-            const documentName = store.name.replace(/\.[^/.]+$/, "");
-            onStoreChange(documentName, {
-                filename: store.name, // Filename original con extensión
-                userId: store.userId
+        if (selectedValue === "user-combined") {
+            // Todos los documentos del usuario - usar el store "combined" del sistema
+            onStoreChange("combined", {
+                filename: null, // No hay un archivo específico
+                userId: selectedUser,
+                allDocuments: true
             });
         } else {
-            // Fallback para otros casos
-            onStoreChange(selectedValue);
+            // Buscar el store por el nombre del documento (sin extensión)
+            const store = userStores.find(s => {
+                const docName = s.name.replace(/\.[^/.]+$/, "");
+                return docName === selectedValue;
+            });
+            
+            if (store) {
+                // Enviar solo el nombre del documento (sin prefijo de usuario)
+                // La API manejará internamente el prefijo cuando sea necesario
+                const documentName = store.name.replace(/\.[^/.]+$/, "");
+                onStoreChange(documentName, {
+                    filename: store.name, // Filename original con extensión
+                    userId: store.userId
+                });
+            } else {
+                // Fallback para otros casos
+                onStoreChange(selectedValue);
+            }
         }
     };
 
@@ -51,13 +68,20 @@ const VectorStoreSelector = ({ vectorStores, selectedStore, onStoreChange, isLoa
             
             <select 
                 className="store-select"
-                value={selectedStore}
+                value={displaySelectedStore}
                 onChange={handleStoreChange}
                 disabled={isLoading}
             >
                 {/* Solo Documentos del Usuario */}
                 {userStores.length > 0 && selectedUser ? (
                     <optgroup label="👤 Mis Documentos">
+                        {/* Opción para todos los documentos si hay más de 1 */}
+                        {userStores.length > 1 && (
+                            <option value="user-combined">
+                                📚 Todos mis documentos ({userStores.length})
+                            </option>
+                        )}
+                        {/* Documentos individuales */}
                         {userStores.map(store => {
                             const docName = store.name.replace(/\.[^/.]+$/, "");
                             return (
