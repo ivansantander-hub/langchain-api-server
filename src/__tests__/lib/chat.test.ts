@@ -41,6 +41,7 @@ describe('chat.ts', () => {
       }));
       (ChatHistoryManager as jest.Mock).mockImplementation(() => ({
         getChatHistory: jest.fn().mockReturnValue([]),
+        getChatHistoryLegacy: jest.fn().mockReturnValue([]),
         addExchange: jest.fn(),
         getUserVectorStores: jest.fn().mockReturnValue([]),
         getUserVectorChats: jest.fn().mockReturnValue([]),
@@ -106,6 +107,7 @@ describe('chat.ts', () => {
       }));
       (ChatHistoryManager as jest.Mock).mockImplementation(() => ({
         getChatHistory: jest.fn().mockReturnValue([]),
+        getChatHistoryLegacy: jest.fn().mockReturnValue([]),
         addExchange: jest.fn(),
         getUserVectorStores: jest.fn().mockReturnValue(['combined']),
         getUserVectorChats: jest.fn().mockReturnValue(['default']),
@@ -172,6 +174,7 @@ describe('chat.ts', () => {
       }));
       (ChatHistoryManager as jest.Mock).mockImplementation(() => ({
         getChatHistory: jest.fn().mockReturnValue([]),
+        getChatHistoryLegacy: jest.fn().mockReturnValue([]),
         addExchange: jest.fn(),
         getUserVectorStores: jest.fn().mockReturnValue([]),
         getUserVectorChats: jest.fn().mockReturnValue([]),
