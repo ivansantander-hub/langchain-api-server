@@ -54,8 +54,7 @@ const App = () => {
         // Auto-seleccionar el primer documento si hay documentos disponibles
         if (userStores.length > 0 && !selectedVectorStore) {
             const firstDoc = userStores[0];
-            const docName = firstDoc.name.replace(/\.[^/.]+$/, "");
-            setSelectedVectorStore(docName);
+            setSelectedVectorStore(firstDoc.id);
             setSelectedDocument({
                 userId: firstDoc.userId,
                 filename: firstDoc.filename,
@@ -183,38 +182,18 @@ const App = () => {
     };
 
     const handleVectorStoreChange = (newStore, additionalInfo = null) => {
-        // Generar nuevo chat ID cuando cambia de documento/store
-        const newChatId = window.apiClient.constructor.generateId();
+        console.log('Vector store changed to:', newStore);
         
+        // Solo cambiar el contexto, NO crear nuevo chat ni limpiar mensajes
         setSelectedVectorStore(newStore);
-        setCurrentChatId(newChatId);
         
-        // Limpiar mensajes del chat anterior
-        setMessages([]);
-        
-        // Manejar diferentes tipos de selección
-        if (additionalInfo && additionalInfo.allDocuments) {
-            // Todos los documentos del usuario
-            setSelectedDocument({
-                userId: additionalInfo.userId,
-                filename: null, // No hay archivo específico
-                ready: true,
-                allDocuments: true
-            });
-            console.log(`Cambiado a TODOS los documentos del usuario ${additionalInfo.userId}, nuevo chat: ${newChatId}`);
-        } else if (additionalInfo && additionalInfo.filename && additionalInfo.userId) {
-            // Documento específico del usuario
-            setSelectedDocument({
-                userId: additionalInfo.userId,
-                filename: additionalInfo.filename,
-                ready: true,
-                allDocuments: false
-            });
-            console.log(`Cambiado a documento ${additionalInfo.filename}, nuevo chat: ${newChatId}`);
+        // Si hay una selección válida, actualizar el documento seleccionado
+        if (newStore && newStore !== '') {
+            console.log(`Context changed to: ${newStore}. Chat continues in unified session.`);
         } else {
-            // Sin documento seleccionado (caso por defecto)
-            setSelectedDocument(null);
-            console.log(`Cambiado a ${newStore}, nuevo chat: ${newChatId}`);
+            // Sin documento seleccionado
+            setSelectedVectorStore(null);
+            console.log('No document selected for context.');
         }
     };
 

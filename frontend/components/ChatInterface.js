@@ -25,9 +25,13 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
     // Efecto para mantener el foco en el input
     React.useEffect(() => {
         const focusInput = () => {
-            if (chatInputRef.current && !isLoading) {
+            if (chatInputRef.current && !isLoading && typeof chatInputRef.current.focus === 'function') {
                 setTimeout(() => {
-                    chatInputRef.current.focus();
+                    try {
+                        chatInputRef.current.focus();
+                    } catch (error) {
+                        console.warn('Could not focus input:', error);
+                    }
                 }, 100);
             }
         };
@@ -68,7 +72,7 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
         if (selectedVectorStore) {
             generateContextualActions();
         }
-    }, [selectedVectorStore, generateContextualActions]);
+    }, [selectedVectorStore]);
 
     // Efecto para actualizar quick actions cuando cambian los mensajes
     React.useEffect(() => {
@@ -82,7 +86,7 @@ const ChatInterface = ({ selectedVectorStore, selectedUser, selectedChat, isConn
             
             return () => clearTimeout(timer);
         }
-    }, [messages, generateContextualActions]);
+    }, [messages]);
 
     // Cargar historial cuando cambia el chat seleccionado
     React.useEffect(() => {

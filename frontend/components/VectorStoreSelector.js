@@ -1,143 +1,125 @@
-// Componente para seleccionar el vector store
+// Vector Store Selector Component - Simplificado y Coherente
 const VectorStoreSelector = ({ vectorStores, selectedStore, onStoreChange, isLoading, selectedUser }) => {
-    // Asegurar que vectorStores es un array
-    const storesArray = Array.isArray(vectorStores) ? vectorStores : [];
-    
-    // Solo mostrar documentos del usuario
-    const userStores = storesArray.filter(store => store.type === 'user');
-    
-    // Encontrar el store seleccionado (manejar casos especiales)
-    let displaySelectedStore = selectedStore;
-    if (selectedStore === 'combined') {
-        // Si selectedStore es 'combined', podría ser "todos los documentos"
-        displaySelectedStore = 'user-combined';
-    }
-    
-    // Buscar por nombre sin extensión para documentos de usuario
-    const selectedStoreObj = userStores.find(store => {
-        const docName = store.name.replace(/\.[^/.]+$/, "");
-        return docName === selectedStore || store.id === selectedStore;
+    console.log('VectorStoreSelector props:', {
+        vectorStores: vectorStores?.length || 0,
+        selectedStore,
+        isLoading,
+        selectedUser
     });
 
-    const handleStoreChange = (e) => {
-        const selectedValue = e.target.value;
+    // Filtrar solo los vector stores del usuario actual
+    const userVectorStores = React.useMemo(() => {
+        if (!vectorStores || !selectedUser) return [];
         
-        if (selectedValue === "user-combined") {
-            // Todos los documentos del usuario - usar el store "combined" del sistema
-            onStoreChange("combined", {
-                filename: null, // No hay un archivo específico
-                userId: selectedUser,
-                allDocuments: true
+        // Si vectorStores es un array de objetos (nuevo formato)
+        if (vectorStores.length > 0 && typeof vectorStores[0] === 'object') {
+            return vectorStores.filter(store => {
+                return store.userId === selectedUser;
+            }).map(store => {
+                return {
+                    value: store.id,
+                    label: store.displayName || store.name
+                };
             });
-        } else {
-            // Buscar el store por el nombre del documento (sin extensión)
-            const store = userStores.find(s => {
-                const docName = s.name.replace(/\.[^/.]+$/, "");
-                return docName === selectedValue;
-            });
-            
-            if (store) {
-                // Enviar solo el nombre del documento (sin prefijo de usuario)
-                // La API manejará internamente el prefijo cuando sea necesario
-                const documentName = store.name.replace(/\.[^/.]+$/, "");
-                onStoreChange(documentName, {
-                    filename: store.name, // Filename original con extensión
-                    userId: store.userId
-                });
-            } else {
-                // Fallback para otros casos
-                onStoreChange(selectedValue);
-            }
         }
+        
+        // Si vectorStores es un array de strings (formato anterior)
+        return vectorStores.filter(store => {
+            if (store === 'combined') return false; // Excluir combined de la lista
+            return store.startsWith(`${selectedUser}_`);
+        }).map(store => {
+            // Remover el prefijo del usuario para mostrar solo el nombre del documento
+            return {
+                value: store,
+                label: store.replace(new RegExp(`^${selectedUser}_`), '').replace(/_/g, ' ')
+            };
+        });
+    }, [vectorStores, selectedUser]);
+
+    console.log('Filtered user vector stores:', userVectorStores);
+
+    const handleStoreChange = (e) => {
+        const newStore = e.target.value;
+        console.log('Store selection changed to:', newStore);
+        onStoreChange(newStore);
     };
+
+    // Si no hay usuario seleccionado
+    if (!selectedUser) {
+        return (
+            <div className="vector-store-selector">
+                <div className="selector-empty">
+                    <i className="fas fa-user-circle"></i>
+                    <p>Selecciona un usuario primero</p>
+                </div>
+            </div>
+        );
+    }
+
+    // Si está cargando
+    if (isLoading) {
+        return (
+            <div className="vector-store-selector">
+                <div className="selector-loading">
+                    <i className="fas fa-spinner fa-spin"></i>
+                    <span>Cargando documentos...</span>
+                </div>
+            </div>
+        );
+    }
+
+    // Si no hay documentos disponibles
+    if (userVectorStores.length === 0) {
+        return (
+            <div className="vector-store-selector">
+                <div className="selector-empty">
+                    <i className="fas fa-folder-open"></i>
+                    <p>No hay documentos disponibles</p>
+                    <small>Sube documentos usando la sección de arriba</small>
+                </div>
+            </div>
+        );
+    }
+
+    // Buscar el store actualmente seleccionado
+    const currentStore = userVectorStores.find(store => store.value === selectedStore);
+    const currentLabel = currentStore ? currentStore.label : 'Seleccionar documento';
 
     return (
         <div className="vector-store-selector">
-            {selectedUser && (
-                <div className="user-badge">
-                    <i className="fas fa-user"></i>
-                    {selectedUser}
-                </div>
-            )}
-            
-            <select 
-                className="store-select"
-                value={displaySelectedStore}
-                onChange={handleStoreChange}
-                disabled={isLoading}
-            >
-                {/* Solo Documentos del Usuario */}
-                {userStores.length > 0 && selectedUser ? (
-                    <optgroup label="👤 Mis Documentos">
-                        {/* Opción para todos los documentos si hay más de 1 */}
-                        {userStores.length > 1 && (
-                            <option value="user-combined">
-                                📚 Todos mis documentos ({userStores.length})
-                            </option>
-                        )}
-                        {/* Documentos individuales */}
-                        {userStores.map(store => {
-                            const docName = store.name.replace(/\.[^/.]+$/, "");
-                            return (
-                                <option key={store.id} value={docName}>
-                                    📄 {store.displayName}
-                                </option>
-                            );
-                        })}
-                    </optgroup>
-                ) : selectedUser ? (
-                    <optgroup label="👤 Mis Documentos">
-                        <option disabled value="">
-                            Sube documentos para verlos aquí
+            <div className="document-selector">
+                <label htmlFor="store-select" className="selector-label">
+                    <i className="fas fa-file-alt"></i>
+                    Documento activo
+                </label>
+                <select 
+                    id="store-select"
+                    className="modern-select" 
+                    value={selectedStore || ''} 
+                    onChange={handleStoreChange}
+                    disabled={isLoading}
+                >
+                    <option value="">Seleccionar documento</option>
+                    {userVectorStores.map(store => (
+                        <option key={store.value} value={store.value}>
+                            {store.label}
                         </option>
-                    </optgroup>
-                ) : (
-                    <option disabled value="">
-                        Selecciona un usuario para ver sus documentos
-                    </option>
-                )}
-            </select>
-
-            {/* Información del store seleccionado */}
-            {selectedStoreObj && (
-                <div className="store-info">
-                    <div className="store-details">
-                        <div className="store-icon">
-                            <i className={selectedStoreObj.icon}></i>
-                        </div>
-                        <div className="store-content">
-                            <strong className="store-name">{selectedStoreObj.displayName}</strong>
-                            <p className="store-description">{selectedStoreObj.description}</p>
-                            {selectedStoreObj.type === 'user' && (
-                                <div className="store-badges">
-                                    <span className="badge badge-user">Personal</span>
-                                </div>
-                            )}
-                        </div>
+                    ))}
+                </select>
+                
+                {selectedStore && currentStore && (
+                    <div className="selection-info">
+                        <i className="fas fa-check-circle"></i>
+                        <span>Contexto: {currentStore.label}</span>
                     </div>
-                </div>
-            )}
-
-            {/* Estadísticas */}
-            <div className="store-stats">
-                <div className="stats-grid">
-                    {selectedUser && (
-                        <div className="stat-item">
-                            <i className="fas fa-user"></i>
-                            <span>{userStores.length} Documentos</span>
-                        </div>
-                    )}
-                    {!selectedUser && (
-                        <div className="stat-item">
-                            <i className="fas fa-info-circle"></i>
-                            <span>Selecciona un usuario</span>
-                        </div>
-                    )}
-                </div>
+                )}
             </div>
         </div>
     );
 };
+
+// Exportar al objeto window
+window.VectorStoreSelector = VectorStoreSelector;
 
 // Componente para mostrar el estado de conexión
 const ConnectionStatus = ({ isConnected, isLoading }) => {
@@ -167,12 +149,10 @@ const ConnectionStatus = ({ isConnected, isLoading }) => {
 // Estilos mejorados para el VectorStoreSelector
 const vectorStoreSelectorStyles = `
     .vector-store-selector {
-        background: white;
         border-radius: 12px;
         padding: 20px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         margin-bottom: 20px;
-        border: 1px solid #e2e8f0;
     }
 
     .selector-header {
@@ -402,5 +382,4 @@ if (!document.getElementById('vector-store-selector-styles')) {
     document.head.appendChild(style);
 }
 
-window.VectorStoreSelector = VectorStoreSelector;
 window.ConnectionStatus = ConnectionStatus; 
