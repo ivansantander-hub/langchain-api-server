@@ -5,6 +5,8 @@ const App = () => {
     const [isConnected, setIsConnected] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [vectorStores, setVectorStores] = useState([]);
+    const [userDocuments, setUserDocuments] = useState([]);
+    const [combinedStores, setCombinedStores] = useState([]);
     const [selectedVectorStore, setSelectedVectorStore] = useState('combined');
     const [error, setError] = useState(null);
 
@@ -24,6 +26,43 @@ const App = () => {
         // Restore last user and chat from localStorage
         restoreLastSession();
     }, []);
+
+    // Reload user documents when user changes
+    useEffect(() => {
+        if (selectedUser) {
+            loadUserDocuments();
+        } else {
+            setUserDocuments([]);
+        }
+    }, [selectedUser]);
+
+    // Solo usar documentos de usuario, no documentos del sistema
+    useEffect(() => {
+        const userStores = userDocuments.map(doc => ({
+            id: `${selectedUser}_${doc.filename.replace(/\.[^/.]+$/, "")}`,
+            name: doc.filename,
+            type: 'user',
+            displayName: doc.filename,
+            description: `Documento personal - ${formatFileSize(doc.size)}`,
+            icon: 'fas fa-file-user',
+            userId: selectedUser,
+            filename: doc.filename
+        }));
+
+        setCombinedStores(userStores);
+        
+        // Auto-seleccionar el primer documento si hay documentos disponibles
+        if (userStores.length > 0 && !selectedVectorStore) {
+            const firstDoc = userStores[0];
+            const docName = firstDoc.name.replace(/\.[^/.]+$/, "");
+            setSelectedVectorStore(docName);
+            setSelectedDocument({
+                userId: firstDoc.userId,
+                filename: firstDoc.filename,
+                ready: true
+            });
+        }
+    }, [userDocuments, selectedUser]);
 
     const initializeApp = async () => {
         setIsLoading(true);
@@ -88,14 +127,84 @@ const App = () => {
         }
     };
 
-    const handleVectorStoreChange = (newStore) => {
+    const loadUserDocuments = async () => {
+        if (!selectedUser) return;
+        
+        try {
+            const response = await window.apiClient.getUserFiles(selectedUser);
+            setUserDocuments(response.files || []);
+        } catch (error) {
+            console.error('Error loading user documents:', error);
+            setUserDocuments([]);
+        }
+    };
+
+    // Helper functions for system stores
+    const getSystemStoreDisplayName = (storeName) => {
+        switch (storeName) {
+            case 'combined':
+                return '📚 Todos los Documentos';
+            case 'my-document':
+                return '📄 Mi Documento';
+            default:
+                return storeName.charAt(0).toUpperCase() + storeName.slice(1);
+        }
+    };
+
+    const getSystemStoreDescription = (storeName) => {
+        switch (storeName) {
+            case 'combined':
+                return 'Buscar en todos los documentos del sistema';
+            case 'my-document':
+                return 'Documento específico del sistema';
+            default:
+                return `Base de conocimiento: ${storeName}`;
+        }
+    };
+
+    const getSystemStoreIcon = (storeName) => {
+        switch (storeName) {
+            case 'combined':
+                return 'fas fa-layer-group';
+            case 'my-document':
+                return 'fas fa-file-alt';
+            default:
+                return 'fas fa-database';
+        }
+    };
+
+    // Helper function for file size formatting
+    const formatFileSize = (bytes) => {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    };
+
+    const handleVectorStoreChange = (newStore, additionalInfo = null) => {
         setSelectedVectorStore(newStore);
+        
+        // Siempre actualizar selectedDocument para documentos de usuario
+        if (additionalInfo && additionalInfo.filename && additionalInfo.userId) {
+            setSelectedDocument({
+                userId: additionalInfo.userId,
+                filename: additionalInfo.filename,
+                ready: true
+            });
+        } else {
+            setSelectedDocument(null);
+        }
     };
 
     const handleDocumentUploaded = async (response) => {
         console.log('Document uploaded:', response);
         // Reload vector stores after uploading a document
         await loadVectorStores();
+        // Also reload user documents if user is selected
+        if (selectedUser) {
+            await loadUserDocuments();
+        }
     };
 
     const handleRetryConnection = () => {
@@ -155,19 +264,8 @@ const App = () => {
 
     const handleDocumentReady = (document) => {
         setSelectedDocument(document);
-        
-        // Opcional: crear automáticamente un nuevo chat para este documento
-        if (document && document.ready) {
-            const documentChat = {
-                id: `doc-${Date.now()}`,
-                vectorStore: document.filename,
-                displayName: `Chat con ${document.filename}`,
-                preview: 'Chat con documento específico',
-                isDocumentChat: true,
-                filename: document.filename
-            };
-            setSelectedChat(documentChat);
-        }
+        // Los documentos son recursos que se pueden seleccionar para chats existentes
+        // No se crean chats automáticamente
     };
 
     // Get user information to display in the header
@@ -360,10 +458,11 @@ const App = () => {
                     {/* Vector Store Selector */}
                     <section className="sidebar-section">
                         <window.VectorStoreSelector
-                            vectorStores={vectorStores}
+                            vectorStores={combinedStores}
                             selectedStore={selectedVectorStore}
-                            onStoreChange={setSelectedVectorStore}
+                            onStoreChange={handleVectorStoreChange}
                             isLoading={isLoading}
+                            selectedUser={selectedUser}
                         />
                     </section>
 

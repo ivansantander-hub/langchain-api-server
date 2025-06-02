@@ -5,8 +5,7 @@ const UserDocumentManager = ({ userId, onDocumentReady }) => {
     const [selectedFile, setSelectedFile] = React.useState(null);
     const [uploadStatus, setUploadStatus] = React.useState(null);
     const [isUploading, setIsUploading] = React.useState(false);
-    const [isVectorizing, setIsVectorizing] = React.useState(false);
-    const [vectorizingFile, setVectorizingFile] = React.useState(null);
+    // Eliminamos los estados de vectorización separada
     const [showUploadForm, setShowUploadForm] = React.useState(false);
 
     // Cargar archivos del usuario al cambiar userId
@@ -83,81 +82,59 @@ const UserDocumentManager = ({ userId, onDocumentReady }) => {
         setIsUploading(true);
         setUploadStatus({
             type: 'info',
-            message: 'Subiendo archivo...'
+            message: 'Subiendo y vectorizando archivo...'
         });
 
         try {
             // Leer el contenido del archivo
             const content = await window.apiClient.constructor.readFileAsText(selectedFile);
             
-            // Subir el archivo (sin vectorización)
-            const response = await window.apiClient.uploadFile(userId, selectedFile.name, content);
+            // Subir y vectorizar el archivo en una sola operación
+            const response = await window.apiClient.uploadAndVectorizeFile(userId, selectedFile.name, content);
             
             setUploadStatus({
                 type: 'success',
-                message: `Archivo "${selectedFile.name}" subido exitosamente. Listo para vectorizar.`
+                message: `✅ Archivo "${selectedFile.name}" subido y vectorizado exitosamente. ¡Listo para chat!`
             });
 
-            // Limpiar selección
+            // Limpiar selección y formulario
             setSelectedFile(null);
             setShowUploadForm(false);
             
-            // Recargar lista de archivos
-            await loadUserFiles();
-
-        } catch (error) {
-            console.error('Upload error:', error);
-            setUploadStatus({
-                type: 'error',
-                message: `Error subiendo archivo: ${error.message}`
-            });
-        } finally {
-            setIsUploading(false);
-        }
-    };
-
-    const handleVectorize = async (filename) => {
-        if (!userId || !filename) return;
-
-        setIsVectorizing(true);
-        setVectorizingFile(filename);
-        setUploadStatus({
-            type: 'info',
-            message: `Vectorizando archivo "${filename}"...`
-        });
-
-        try {
-            const response = await window.apiClient.vectorizeFile(userId, filename);
+            // Limpiar el input file
+            const fileInput = document.getElementById('user-file-input');
+            if (fileInput) fileInput.value = '';
             
-            setUploadStatus({
-                type: 'success',
-                message: `Archivo "${filename}" vectorizado exitosamente. Listo para chat.`
-            });
-
-            // Recargar lista de archivos para actualizar el estado
+            // Recargar lista de archivos
             await loadUserFiles();
 
             // Notificar al componente padre que hay un documento listo
             if (onDocumentReady) {
                 onDocumentReady({
                     userId,
-                    filename,
+                    filename: selectedFile.name,
                     vectorStoreId: response.vectorStoreId,
                     ready: true
                 });
             }
 
+            // Auto-ocultar el mensaje después de 3 segundos
+            setTimeout(() => {
+                setUploadStatus(null);
+            }, 3000);
+
         } catch (error) {
-            console.error('Vectorization error:', error);
+            console.error('Upload error:', error);
             setUploadStatus({
                 type: 'error',
-                message: `Error vectorizando archivo: ${error.message}`
+                message: `❌ Error subiendo archivo: ${error.message}`
             });
         } finally {
-            setIsVectorizing(false);
-            setVectorizingFile(null);
+            setIsUploading(false);
         }
     };
+
+    // Eliminamos la función de vectorización separada ya que ahora se hace en un solo paso
 
     const formatFileSize = (bytes) => {
         if (bytes === 0) return '0 Bytes';
@@ -231,12 +208,12 @@ const UserDocumentManager = ({ userId, onDocumentReady }) => {
                                 {isUploading ? (
                                     <>
                                         <i className="fas fa-spinner fa-spin"></i>
-                                        Subiendo...
+                                        Procesando...
                                     </>
                                 ) : (
                                     <>
                                         <i className="fas fa-upload"></i>
-                                        Subir
+                                        Subir y Procesar
                                     </>
                                 )}
                             </button>
@@ -294,51 +271,17 @@ const UserDocumentManager = ({ userId, onDocumentReady }) => {
                                 </div>
 
                                 <div className="file-status">
-                                    {file.vectorized ? (
-                                        <span className="status-badge ready">
-                                            <i className="fas fa-check-circle"></i>
-                                            Listo para chat
-                                        </span>
-                                    ) : (
-                                        <span className="status-badge pending">
-                                            <i className="fas fa-clock"></i>
-                                            Pendiente vectorización
-                                        </span>
-                                    )}
+                                    <span className="status-badge ready">
+                                        <i className="fas fa-check-circle"></i>
+                                        Listo para chat
+                                    </span>
                                 </div>
 
                                 <div className="file-actions">
-                                    {file.vectorized ? (
-                                        <button
-                                            className="chat-button"
-                                            onClick={() => onDocumentReady && onDocumentReady({
-                                                userId,
-                                                filename: file.filename,
-                                                ready: true
-                                            })}
-                                        >
-                                            <i className="fas fa-comments"></i>
-                                            Chatear
-                                        </button>
-                                    ) : (
-                                        <button
-                                            className="vectorize-button"
-                                            onClick={() => handleVectorize(file.filename)}
-                                            disabled={isVectorizing && vectorizingFile === file.filename}
-                                        >
-                                            {isVectorizing && vectorizingFile === file.filename ? (
-                                                <>
-                                                    <i className="fas fa-spinner fa-spin"></i>
-                                                    Vectorizando...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <i className="fas fa-magic"></i>
-                                                    Vectorizar
-                                                </>
-                                            )}
-                                        </button>
-                                    )}
+                                    <div className="action-hint">
+                                        <i className="fas fa-info-circle"></i>
+                                        Selecciona en "Base de Conocimiento"
+                                    </div>
                                 </div>
                             </div>
                         ))}
@@ -349,10 +292,11 @@ const UserDocumentManager = ({ userId, onDocumentReady }) => {
             <div className="help-section">
                 <h4><i className="fas fa-info-circle"></i> ¿Cómo funciona?</h4>
                 <ol>
-                    <li><strong>Subir:</strong> Sube tu documento (.txt o .md)</li>
-                    <li><strong>Vectorizar:</strong> Procesa el documento para búsqueda</li>
-                    <li><strong>Chatear:</strong> Haz preguntas específicas sobre tu documento</li>
+                    <li><strong>Subir:</strong> Sube tu documento (.txt o .md) - se procesa automáticamente</li>
+                    <li><strong>Seleccionar:</strong> Ve a "Base de Conocimiento" y elige tu documento</li>
+                    <li><strong>Chatear:</strong> Haz preguntas específicas sobre tu documento seleccionado</li>
                 </ol>
+                <p><small>💡 Tus documentos aparecen automáticamente en el selector "Base de Conocimiento"</small></p>
             </div>
         </div>
     );
@@ -591,6 +535,24 @@ const userDocumentManagerStyles = `
     .file-actions {
         text-align: center;
         margin-top: 12px;
+    }
+
+    .action-hint {
+        color: #6b7280;
+        font-size: 0.75rem;
+        font-style: italic;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        padding: 8px;
+        background: #f8fafc;
+        border-radius: 6px;
+        border: 1px dashed #d1d5db;
+    }
+
+    .action-hint i {
+        color: #9ca3af;
     }
 
     .chat-button, .vectorize-button {

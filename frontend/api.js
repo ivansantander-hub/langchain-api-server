@@ -43,7 +43,19 @@ class APIClient {
 
     // ===== NUEVOS MÉTODOS PARA GESTIÓN DE ARCHIVOS POR USUARIO =====
 
-    // Subir archivo de texto (sin vectorización)
+    // Subir y vectorizar archivo en una sola operación
+    async uploadAndVectorizeFile(userId, filename, content) {
+        return this.request('/api/upload-and-vectorize', {
+            method: 'POST',
+            body: JSON.stringify({
+                userId,
+                filename,
+                content
+            })
+        });
+    }
+
+    // Subir archivo de texto (sin vectorización) - legacy
     async uploadFile(userId, filename, content) {
         return this.request('/api/upload-file', {
             method: 'POST',

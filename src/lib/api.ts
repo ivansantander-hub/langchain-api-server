@@ -368,6 +368,68 @@ export function createApiServer(
    *       500:
    *         description: Server error
    */
+  // New endpoint to upload and vectorize files in one step
+  app.post('/api/upload-and-vectorize', (async (req: Request, res: Response) => {
+    try {
+      const { userId, filename, content } = req.body;
+      
+      if (!userId || !filename || !content) {
+        return res.status(400).json({ error: 'userId, filename and content are required' });
+      }
+
+      // Validate content size (10MB limit for text)
+      if (content.length > 10000000) {
+        return res.status(413).json({ error: 'File too large. Maximum size is 10MB for text files.' });
+      }
+
+      console.log(`Uploading and vectorizing file for user ${userId}: ${filename}`);
+      
+      // Step 1: Save the file
+      const savedFilename = await userFileManager.saveUserFile(userId, filename, content);
+      const fileStats = userFileManager.getFileStats(userId, savedFilename);
+      
+      console.log(`File uploaded successfully: ${userId}/${savedFilename}`);
+      
+      // Step 2: Vectorize the file
+      console.log(`Starting vectorization for user ${userId}, file: ${savedFilename}`);
+      
+      // Load the user document
+      const documents = await loadUserDocument(userId, savedFilename);
+      console.log(`Loaded ${documents.length} document sections`);
+      
+      // Split documents with advanced chunking
+      const chunks = await splitDocumentsAdvanced(documents);
+      console.log(`Created ${chunks.length} high-quality chunks`);
+      
+      if (chunks.length === 0) {
+        throw new Error('No valid chunks could be created from the document');
+      }
+      
+      // Create user vector store
+      const vectorStore = await enhancedVectorManager.createUserVectorStore(userId, savedFilename, chunks);
+      const vectorStoreId = `${userId}_${savedFilename.replace(/\.[^/.]+$/, "")}`;
+      
+      console.log(`Vector store created successfully: ${vectorStoreId}`);
+      
+      res.json({ 
+        message: `File ${savedFilename} uploaded and vectorized successfully for user ${userId}`,
+        userId,
+        filename: savedFilename,
+        size: fileStats?.size || 0,
+        chunks: chunks.length,
+        vectorStoreId,
+        ready_for_chat: true
+      });
+    } catch (error) {
+      console.error('Error during upload and vectorization:', error);
+      
+      res.status(500).json({ 
+        error: 'Failed to upload and vectorize file',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }) as express.RequestHandler);
+
   // New endpoint to upload files only (no vectorization)
   app.post('/api/upload-file', (async (req: Request, res: Response) => {
     try {
@@ -407,6 +469,61 @@ export function createApiServer(
   }) as express.RequestHandler);
 
   /**
+   * @swagger
+   * /api/upload-and-vectorize:
+   *   post:
+   *     summary: Upload and vectorize file in one step
+   *     description: Upload a text file and automatically create vector embeddings
+   *     tags: [Files]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - userId
+   *               - filename
+   *               - content
+   *             properties:
+   *               userId:
+   *                 type: string
+   *                 example: "user123"
+   *               filename:
+   *                 type: string
+   *                 example: "my-document.txt"
+   *               content:
+   *                 type: string
+   *                 example: "Document content here..."
+   *     responses:
+   *       200:
+   *         description: File uploaded and vectorized successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 message:
+   *                   type: string
+   *                 userId:
+   *                   type: string
+   *                 filename:
+   *                   type: string
+   *                 size:
+   *                   type: number
+   *                 chunks:
+   *                   type: number
+   *                 vectorStoreId:
+   *                   type: string
+   *                 ready_for_chat:
+   *                   type: boolean
+   *       400:
+   *         description: Invalid input
+   *       413:
+   *         description: File too large
+   *       500:
+   *         description: Server error
+   *
    * @swagger
    * /api/load-vector:
    *   post:
@@ -656,15 +773,20 @@ export function createApiServer(
           
           const model = createLanguageModel(documentModelConfig);
           
+          // Escape document content to prevent template parsing issues
+          const escapeTemplateChars = (text: string) => {
+            return text.replace(/\{/g, '{{').replace(/\}/g, '}}');
+          };
+          
           // Create a more effective system prompt that emphasizes document usage
           const documentContext = relevantDocs.map((doc, index) => 
-            `Documento ${index + 1}:\n${doc.pageContent}\n`
+            `Documento ${index + 1}:\n${escapeTemplateChars(doc.pageContent)}\n`
           ).join('\n---\n');
           
           // Create a specialized prompt that combines user preferences with document handling
           let effectivePrompt = `Eres un asistente de IA experto en análisis de documentos.
 
-TIENES ACCESO COMPLETO al documento "${filename}" del usuario y DEBES usar esta información para responder.
+TIENES ACCESO COMPLETO al documento "${escapeTemplateChars(filename)}" del usuario y DEBES usar esta información para responder.
 
 CONTEXTO DEL DOCUMENTO:
 ${documentContext}
@@ -679,7 +801,7 @@ INSTRUCCIONES IMPORTANTES:
           // If user has a custom system prompt, append it as additional context but keep document priority
           if (modelConfig?.systemPrompt && modelConfig.systemPrompt.trim()) {
             effectivePrompt += `\n\nINSTRUCCIONES ADICIONALES DEL USUARIO:
-${modelConfig.systemPrompt}
+${escapeTemplateChars(modelConfig.systemPrompt)}
 
 IMPORTANTE: Las instrucciones anteriores sobre usar el documento y contexto siempre tienen prioridad. Usa estas instrucciones adicionales solo como contexto complementario.`;
           }
@@ -695,11 +817,16 @@ IMPORTANTE: Las instrucciones anteriores sobre usar el documento y contexto siem
           
           // Get chat history for this user and store (legacy format for model processing)
           const history = chatManager.chatHistoryManager.getChatHistoryLegacy(userIdToUse, selectedStore, chatIdToUse);
-          const formattedHistory = formatChatHistory(history);
+          // Escape template characters in chat history
+          const escapedHistory: [string, string][] = history.map(([question, answer]) => [
+            escapeTemplateChars(question),
+            escapeTemplateChars(answer)
+          ]);
+          const formattedHistory = formatChatHistory(escapedHistory);
           
           // Generate AI response
           const aiResponse = await chain.invoke({
-            input: question,
+            input: escapeTemplateChars(question),
             chat_history: formattedHistory,
           });
           
