@@ -23,20 +23,20 @@ export type LegacyHistory = [string, string][];
 
 // Class to manage chat histories for different users and chat sessions
 export class ChatHistoryManager {
-  // Map structure: userId -> vectorName -> chatId -> history
+  // Map structure: userId -> chatId -> vectorName -> history
   private histories: Map<string, Map<string, Map<string, MessageExchange[]>>> = new Map();
   private baseDir: string = './chat-histories';
   
   constructor() {
-    // Ensure the base directory exists
+    // Create base directory if it doesn't exist
     if (!fs.existsSync(this.baseDir)) {
       fs.mkdirSync(this.baseDir, { recursive: true });
     }
-    
+    // Load existing histories from disk on startup (includes migration from old format)
     this.loadAllHistories();
   }
   
-  // Get chat history for a specific user, vector store and chat (new format with timestamps)
+  // Get chat history for a specific user, chat and vector store
   getChatHistory(userId: string, vectorName: string, chatId: string): MessageExchange[] {
     // If user doesn't exist in the map, create an entry
     if (!this.histories.has(userId)) {
@@ -46,20 +46,21 @@ export class ChatHistoryManager {
     // Get the map for this user
     const userHistories = this.histories.get(userId)!;
     
-    // If vector store doesn't exist, create an entry
-    if (!userHistories.has(vectorName)) {
-      userHistories.set(vectorName, new Map<string, MessageExchange[]>());
+    // If chat doesn't exist, create an entry
+    if (!userHistories.has(chatId)) {
+      userHistories.set(chatId, new Map<string, MessageExchange[]>());
     }
     
-    // Get the map for this vector store
-    const vectorHistories = userHistories.get(vectorName)!;
+    // Get the map for this chat
+    const chatHistories = userHistories.get(chatId)!;
     
-    // If chat doesn't exist, create an empty history
-    if (!vectorHistories.has(chatId)) {
-      vectorHistories.set(chatId, []);
+    // If vector store doesn't exist, create an empty history and try to load from disk
+    if (!chatHistories.has(vectorName)) {
+      chatHistories.set(vectorName, []);
+      this.loadChatHistory(userId, vectorName, chatId);
     }
     
-    return vectorHistories.get(chatId)!;
+    return chatHistories.get(vectorName)!;
   }
 
   // Get chat history in legacy format for backward compatibility
@@ -68,7 +69,7 @@ export class ChatHistoryManager {
     return history.map(exchange => [exchange.question, exchange.answer]);
   }
   
-  // Update chat history for a specific user, vector store and chat
+  // Update chat history for a specific user, chat and vector store
   updateChatHistory(userId: string, vectorName: string, chatId: string, history: MessageExchange[]): void {
     // If user doesn't exist in the map, create an entry
     if (!this.histories.has(userId)) {
@@ -78,16 +79,16 @@ export class ChatHistoryManager {
     // Get the map for this user
     const userHistories = this.histories.get(userId)!;
     
-    // If vector store doesn't exist, create an entry
-    if (!userHistories.has(vectorName)) {
-      userHistories.set(vectorName, new Map<string, MessageExchange[]>());
+    // If chat doesn't exist, create an entry
+    if (!userHistories.has(chatId)) {
+      userHistories.set(chatId, new Map<string, MessageExchange[]>());
     }
     
-    // Get the map for this vector store
-    const vectorHistories = userHistories.get(vectorName)!;
+    // Get the map for this chat
+    const chatHistories = userHistories.get(chatId)!;
     
     // Update the history
-    vectorHistories.set(chatId, history);
+    chatHistories.set(vectorName, history);
     
     // Save to disk
     this.saveChatHistory(userId, vectorName, chatId);
@@ -116,14 +117,14 @@ export class ChatHistoryManager {
     return path.join(this.baseDir, userId);
   }
   
-  // Get the directory path for a vector store within a user
-  private getVectorDir(userId: string, vectorName: string): string {
-    return path.join(this.getUserDir(userId), vectorName);
+  // Get the directory path for a chat within a user
+  private getChatDir(userId: string, chatId: string): string {
+    return path.join(this.getUserDir(userId), chatId);
   }
   
   // Get the file path for a specific chat history
   private getChatHistoryPath(userId: string, vectorName: string, chatId: string): string {
-    return path.join(this.getVectorDir(userId, vectorName), `${chatId}.json`);
+    return path.join(this.getChatDir(userId, chatId), `${vectorName}.json`);
   }
   
   // Save chat history to disk
@@ -135,11 +136,11 @@ export class ChatHistoryManager {
       fs.mkdirSync(userDir, { recursive: true });
     }
     
-    const vectorDir = this.getVectorDir(userId, vectorName);
+    const chatDir = this.getChatDir(userId, chatId);
     
-    // Ensure vector store directory exists
-    if (!fs.existsSync(vectorDir)) {
-      fs.mkdirSync(vectorDir, { recursive: true });
+    // Ensure chat directory exists
+    if (!fs.existsSync(chatDir)) {
+      fs.mkdirSync(chatDir, { recursive: true });
     }
     
     const history = this.getChatHistory(userId, vectorName, chatId);
@@ -184,21 +185,21 @@ export class ChatHistoryManager {
           this.histories.set(userId, new Map<string, Map<string, MessageExchange[]>>());
         }
         
-        // Create vector store map if it doesn't exist
+        // Create chat map if it doesn't exist
         const userHistories = this.histories.get(userId)!;
-        if (!userHistories.has(vectorName)) {
-          userHistories.set(vectorName, new Map<string, MessageExchange[]>());
+        if (!userHistories.has(chatId)) {
+          userHistories.set(chatId, new Map<string, MessageExchange[]>());
         }
         
         // Update the history
-        userHistories.get(vectorName)!.set(chatId, history);
+        userHistories.get(chatId)!.set(vectorName, history);
       } catch (error) {
-        console.error(`Error loading chat history for ${userId}/${vectorName}/${chatId}:`, error);
+        console.error(`Error loading chat history for ${userId}/${chatId}/${vectorName}:`, error);
       }
     }
   }
   
-  // Load all chat histories from disk
+  // Load all chat histories from disk with migration support
   private loadAllHistories(): void {
     if (!fs.existsSync(this.baseDir)) {
       return;
@@ -212,48 +213,128 @@ export class ChatHistoryManager {
     for (const userId of userDirs) {
       const userDir = path.join(this.baseDir, userId);
       
-      // Get all vector store directories
-      const vectorDirs = fs.readdirSync(userDir)
+      // Check if this user has the old structure (vector directories with chat files)
+      const items = fs.readdirSync(userDir)
         .filter(file => fs.statSync(path.join(userDir, file)).isDirectory());
       
-      // Load chat histories for each vector store
-      for (const vectorName of vectorDirs) {
-        const vectorDir = path.join(userDir, vectorName);
-        
-        // Get all chat history files
-        const chatFiles = fs.readdirSync(vectorDir)
+      // Detect old structure and migrate if needed
+      let hasOldStructure = false;
+      for (const item of items) {
+        const itemPath = path.join(userDir, item);
+        const itemFiles = fs.readdirSync(itemPath)
           .filter(file => file.endsWith('.json'));
         
-        // Load each chat history
-        for (const chatFile of chatFiles) {
-          const chatId = chatFile.replace('.json', '');
+        // If this directory contains .json files directly, it's old structure
+        if (itemFiles.length > 0) {
+          hasOldStructure = true;
+          console.log(`Migrating old structure for user ${userId}, vector store ${item}`);
+          
+          // Migrate each chat file to new structure
+          for (const chatFile of itemFiles) {
+            const chatId = chatFile.replace('.json', '');
+            const oldPath = path.join(itemPath, chatFile);
+            const newChatDir = path.join(userDir, chatId);
+            const newPath = path.join(newChatDir, `${item}.json`);
+            
+            // Create new chat directory
+            if (!fs.existsSync(newChatDir)) {
+              fs.mkdirSync(newChatDir, { recursive: true });
+            }
+            
+            // Move the file to new location
+            if (!fs.existsSync(newPath)) {
+              fs.copyFileSync(oldPath, newPath);
+              console.log(`Migrated ${oldPath} -> ${newPath}`);
+            }
+          }
+        }
+      }
+      
+      // If we migrated, clean up old structure
+      if (hasOldStructure) {
+        for (const item of items) {
+          const itemPath = path.join(userDir, item);
+          const itemFiles = fs.readdirSync(itemPath)
+            .filter(file => file.endsWith('.json'));
+          
+          if (itemFiles.length > 0) {
+            // Remove old files and directory after migration
+            for (const file of itemFiles) {
+              fs.unlinkSync(path.join(itemPath, file));
+            }
+            try {
+              fs.rmdirSync(itemPath);
+              console.log(`Removed old directory: ${itemPath}`);
+            } catch (error) {
+              console.warn(`Could not remove old directory ${itemPath}:`, error);
+            }
+          }
+        }
+      }
+      
+      // Now load with new structure
+      const chatDirs = fs.readdirSync(userDir)
+        .filter(file => fs.statSync(path.join(userDir, file)).isDirectory());
+      
+      // Load chat histories for each chat
+      for (const chatId of chatDirs) {
+        const chatDir = path.join(userDir, chatId);
+        
+        // Get all vector store files
+        const vectorFiles = fs.readdirSync(chatDir)
+          .filter(file => file.endsWith('.json'));
+        
+        // Load each vector store history
+        for (const vectorFile of vectorFiles) {
+          const vectorName = vectorFile.replace('.json', '');
           this.loadChatHistory(userId, vectorName, chatId);
         }
       }
     }
   }
   
-  // Get all chat IDs for a user and vector store
+  // Get all chat IDs for a user
+  getUserChats(userId: string): string[] {
+    if (!this.histories.has(userId)) {
+      return [];
+    }
+    return Array.from(this.histories.get(userId)!.keys());
+  }
+  
+  // Get all chat IDs for a user and vector store (now returns chats that have this vector store)
   getUserVectorChats(userId: string, vectorName: string): string[] {
     if (!this.histories.has(userId)) {
       return [];
     }
     
     const userHistories = this.histories.get(userId)!;
-    if (!userHistories.has(vectorName)) {
-      return [];
+    const chats: string[] = [];
+    
+    for (const [chatId, chatHistories] of userHistories) {
+      if (chatHistories.has(vectorName)) {
+        chats.push(chatId);
+      }
     }
     
-    return Array.from(userHistories.get(vectorName)!.keys());
+    return chats;
   }
   
-  // Get all vector stores for a user
+  // Get all vector stores for a user (across all chats)
   getUserVectorStores(userId: string): string[] {
     if (!this.histories.has(userId)) {
       return [];
     }
     
-    return Array.from(this.histories.get(userId)!.keys());
+    const vectorStores = new Set<string>();
+    const userHistories = this.histories.get(userId)!;
+    
+    for (const chatHistories of userHistories.values()) {
+      for (const vectorName of chatHistories.keys()) {
+        vectorStores.add(vectorName);
+      }
+    }
+    
+    return Array.from(vectorStores);
   }
   
   // Get all user IDs
@@ -268,14 +349,46 @@ export class ChatHistoryManager {
     }
     
     const userHistories = this.histories.get(userId)!;
-    if (!userHistories.has(vectorName)) {
+    if (!userHistories.has(chatId)) {
       return;
     }
     
-    const vectorHistories = userHistories.get(vectorName)!;
-    vectorHistories.set(chatId, [] as MessageExchange[]);
+    const chatHistories = userHistories.get(chatId)!;
+    chatHistories.set(vectorName, []);
     
     // Save empty history to disk
     this.saveChatHistory(userId, vectorName, chatId);
+  }
+  
+  // Delete entire chat (all vector stores for a chat)
+  deleteChatCompletely(userId: string, chatId: string): void {
+    if (!this.histories.has(userId)) {
+      return;
+    }
+    
+    const userHistories = this.histories.get(userId)!;
+    if (!userHistories.has(chatId)) {
+      return;
+    }
+    
+    // Remove from memory
+    userHistories.delete(chatId);
+    
+    // Remove from disk
+    const chatDir = this.getChatDir(userId, chatId);
+    if (fs.existsSync(chatDir)) {
+      try {
+        // Remove all files in chat directory
+        const files = fs.readdirSync(chatDir);
+        for (const file of files) {
+          fs.unlinkSync(path.join(chatDir, file));
+        }
+        // Remove the chat directory
+        fs.rmdirSync(chatDir);
+        console.log(`Deleted chat completely: ${userId}/${chatId}`);
+      } catch (error) {
+        console.error(`Error deleting chat directory ${chatDir}:`, error);
+      }
+    }
   }
 } 

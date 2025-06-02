@@ -229,7 +229,7 @@ const UserManager = ({ onUserChange, onChatChange, selectedUser, selectedChat, c
     const handleDeleteChat = async (chat, event) => {
         event.stopPropagation();
         
-        if (!confirm(`¿Estás seguro de que quieres eliminar el chat "${chat.displayName}"?`)) {
+        if (!confirm(`¿Estás seguro de que quieres eliminar el chat "${chat.displayName}" completamente? Esta acción no se puede deshacer.`)) {
             return;
         }
 
@@ -237,26 +237,32 @@ const UserManager = ({ onUserChange, onChatChange, selectedUser, selectedChat, c
             setIsLoading(true);
             setError(null);
             
-            // Intentar eliminar el historial del chat del servidor
+            // Usar el nuevo método que elimina el chat completamente (todas las vector stores)
             try {
-                await window.apiClient.clearChatHistory(chat.userId, chat.vectorStore, chat.id);
+                await window.apiClient.deleteChatCompletely(chat.userId, chat.id);
+                console.log(`Chat ${chat.id} eliminado completamente del servidor`);
             } catch (serverError) {
                 console.warn('Error al eliminar el chat del servidor, continuando con eliminación local:', serverError);
             }
             
-            // Eliminar el chat de la lista local inmediatamente
-            setChats(prevChats => prevChats.filter(c => 
-                !(c.id === chat.id && c.vectorStore === chat.vectorStore)
-            ));
+            // Eliminar todas las instancias del chat (sin importar el vector store) de la lista local
+            setChats(prevChats => prevChats.filter(c => c.id !== chat.id));
             
             // Si el chat eliminado era el seleccionado, deseleccionar
-            if (selectedChat && selectedChat.id === chat.id && selectedChat.vectorStore === chat.vectorStore) {
+            if (selectedChat && selectedChat.id === chat.id) {
                 onChatChange(null);
             }
             
-            // Eliminar también el nombre personalizado del localStorage
-            const chatKey = `chat_name_${chat.userId}_${chat.vectorStore}_${chat.id}`;
-            localStorage.removeItem(chatKey);
+            // Eliminar también el nombre personalizado del localStorage para todos los vector stores
+            const chatKeyPrefix = `chat_name_${chat.userId}`;
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith(chatKeyPrefix) && key.includes(`_${chat.id}`)) {
+                    localStorage.removeItem(key);
+                }
+            }
+            
+            console.log(`Chat ${chat.id} eliminado completamente`);
             
         } catch (error) {
             console.error('Error deleting chat:', error);

@@ -837,7 +837,7 @@ IMPORTANTE: Las instrucciones anteriores sobre usar el documento y contexto siem
    *                 chatId:
    *                   type: string
    */
-  // Endpoint to clear chat history
+  // Endpoint to clear chat history for a specific vector store
   app.delete('/api/users/:userId/vector-stores/:vectorName/chats/:chatId', (req: Request, res: Response) => {
     const { userId, vectorName, chatId } = req.params;
     chatManager.clearChatHistory(userId, vectorName, chatId);
@@ -845,6 +845,17 @@ IMPORTANTE: Las instrucciones anteriores sobre usar el documento y contexto siem
       message: 'Chat history cleared successfully',
       userId,
       vectorName,
+      chatId
+    });
+  });
+
+  // Endpoint to delete entire chat (all vector stores)
+  app.delete('/api/users/:userId/chats/:chatId', (req: Request, res: Response) => {
+    const { userId, chatId } = req.params;
+    chatManager.chatHistoryManager.deleteChatCompletely(userId, chatId);
+    res.json({ 
+      message: 'Chat deleted completely',
+      userId,
       chatId
     });
   });

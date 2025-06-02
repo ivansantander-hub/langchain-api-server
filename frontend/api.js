@@ -184,7 +184,7 @@ class APIClient {
         return this.getChatMessages(userId, vectorName, chatId);
     }
 
-    // Clear chat history
+    // Clear chat history for a specific vector store
     async clearChatHistory(userId, vectorName, chatId) {
         try {
             const response = await this.request(`/api/users/${userId}/vector-stores/${vectorName}/chats/${chatId}`, {
@@ -194,6 +194,19 @@ class APIClient {
         } catch (error) {
             console.error(`Error clearing chat history for ${chatId}:`, error);
             throw new Error(`No se pudo eliminar el historial del chat: ${error.message}`);
+        }
+    }
+
+    // Delete entire chat (all vector stores)
+    async deleteChatCompletely(userId, chatId) {
+        try {
+            const response = await this.request(`/api/users/${userId}/chats/${chatId}`, {
+                method: 'DELETE'
+            });
+            return response;
+        } catch (error) {
+            console.error(`Error deleting chat completely ${chatId}:`, error);
+            throw new Error(`No se pudo eliminar el chat completamente: ${error.message}`);
         }
     }
 
