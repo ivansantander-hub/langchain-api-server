@@ -7,6 +7,7 @@ import { availableModels, defaultModelConfig, ModelConfig } from './model.js';
 import { saveUploadedDocument, loadSingleDocument, splitDocuments } from './document.js';
 import OpenAI from 'openai';
 import { ChatHistoryManager } from './chatHistory.js';
+import { specs, swaggerUi } from './swagger.js';
 
 // Get __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -48,6 +49,13 @@ export function createApiServer(
   const publicPath = path.join(__dirname, '../../frontend');
   app.use(express.static(publicPath));
 
+  // Swagger configuration
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs, {
+    explorer: true,
+    customCss: '.swagger-ui .topbar { display: none }',
+    customSiteTitle: 'LangChain Chat API Documentation'
+  }));
+
   // API Routes
 
   // Home route - serve the web client
@@ -55,6 +63,34 @@ export function createApiServer(
     res.sendFile(path.join(publicPath, 'index.html'));
   });
 
+  /**
+   * @swagger
+   * /api/health:
+   *   get:
+   *     summary: Server health check
+   *     description: Endpoint to verify server health status and get system information
+   *     tags: [Health]
+   *     responses:
+   *       200:
+   *         description: Server running correctly
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 status:
+   *                   type: string
+   *                 timestamp:
+   *                   type: string
+   *                 uptime:
+   *                   type: number
+   *                 memory:
+   *                   type: object
+   *                 version:
+   *                   type: string
+   *                 vectorStores:
+   *                   type: number
+   */
   // Health check endpoint for Railway and other deployment platforms
   app.get('/api/health', (_: Request, res: Response) => {
     res.status(200).json({ 
@@ -67,10 +103,33 @@ export function createApiServer(
     });
   });
 
+  /**
+   * @swagger
+   * /api:
+   *   get:
+   *     summary: API information
+   *     description: Get general information about the API and its available endpoints
+   *     tags: [Health]
+   *     responses:
+   *       200:
+   *         description: API information
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 message:
+   *                   type: string
+   *                 documentation:
+   *                   type: string
+   *                 endpoints:
+   *                   type: object
+   */
   // API Info route
   app.get('/api', (_: Request, res: Response) => {
     res.json({ 
-      message: 'LangChain Document Chat API', 
+      message: 'LangChain Document Chat API',
+      documentation: '/api-docs - Complete Swagger documentation',
       endpoints: {
         '/api/health': 'GET - Health check for deployment platforms',
         '/api/chat': 'POST - Send a question to get an answer from the documents',
@@ -89,6 +148,28 @@ export function createApiServer(
     });
   });
 
+  /**
+   * @swagger
+   * /api/vector-stores:
+   *   get:
+   *     summary: Get available vector stores
+   *     description: List all available vector stores in the system
+   *     tags: [Vector Stores]
+   *     responses:
+   *       200:
+   *         description: List of vector stores
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 stores:
+   *                   type: array
+   *                   items:
+   *                     type: string
+   *                 default:
+   *                   type: string
+   */
   // Endpoint to list all available vector stores
   app.get('/api/vector-stores', (_: Request, res: Response) => {
     const stores = vectorStoreManager.getAvailableStores();
@@ -98,6 +179,28 @@ export function createApiServer(
     });
   });
 
+  /**
+   * @swagger
+   * /api/models:
+   *   get:
+   *     summary: Get available models (cached)
+   *     description: List available OpenAI models from local cache
+   *     tags: [Models]
+   *     responses:
+   *       200:
+   *         description: List of available models
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 models:
+   *                   type: array
+   *                   items:
+   *                     type: string
+   *                 default:
+   *                   type: string
+   */
   // Endpoint to get available OpenAI models
   app.get('/api/models', (_: Request, res: Response) => {
     res.json({
@@ -169,10 +272,96 @@ export function createApiServer(
       totalStores: stores.length,
       stores: storeStatus,
       combinedExists: vectorStoreManager.storeExists('combined'),
-      message: stores.length === 0 ? 'No vector stores found. Upload documents to create them.' : 'Vector stores available'
+              message: stores.length === 0 ? 'No vector stores found. Upload documents to create them.' : 'Vector stores available'
     });
   });
 
+  /**
+   * @swagger
+   * /api/add-document:
+   *   post:
+   *     summary: Upload document to system
+   *     description: Upload a document (text or PDF) and add it to vector stores for search
+   *     tags: [Documents]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - filename
+   *               - content
+   *             properties:
+   *               filename:
+   *                 type: string
+   *                 description: Name of the file to upload
+   *               content:
+   *                 type: string
+   *                 description: Content of the file (text or base64 for PDF)
+   *           examples:
+   *             text_document:
+   *               summary: Text document
+   *               value:
+   *                 filename: "manual.txt"
+   *                 content: "This is the manual content..."
+   *             pdf_document:
+   *               summary: PDF document
+   *               value:
+   *                 filename: "guide.pdf"
+   *                 content: "JVBERi0xLjQKJeLjz9MKMSAwIG9iagpbPD4+XQplbmRvYmoKMiAwIG9iagpbPD4+XQplbmRvYmoK..."
+   *     responses:
+   *       200:
+   *         description: Document processed successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 message:
+   *                   type: string
+   *                 chunks:
+   *                   type: number
+   *                 pages:
+   *                   type: number
+   *                 contentPreview:
+   *                   type: string
+   *                 vectorStores:
+   *                   type: array
+   *                   items:
+   *                     type: string
+   *       400:
+   *         description: Invalid input data
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *       413:
+   *         description: File too large
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *       500:
+   *         description: Error processing document
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *                 details:
+   *                   type: string
+   *                 filename:
+   *                   type: string
+   */
   // Endpoint to add a document to vector stores
   app.post('/api/add-document', (async (req: Request, res: Response) => {
     let savedFilename: string | null = null;
@@ -287,6 +476,115 @@ export function createApiServer(
     }
   }) as express.RequestHandler);
 
+  /**
+   * @swagger
+   * /api/chat:
+   *   post:
+   *     summary: Send message to chat
+   *     description: Process a question and return a response based on indexed documents
+   *     tags: [Chat]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - question
+   *             properties:
+   *               question:
+   *                 type: string
+   *                 description: The question to ask
+   *               vectorStore:
+   *                 type: string
+   *                 description: Specific vector store to use
+   *               userId:
+   *                 type: string
+   *                 description: User ID for chat context
+   *               chatId:
+   *                 type: string
+   *                 description: Chat ID for conversation context
+   *               modelConfig:
+   *                 type: object
+   *                 description: Model configuration options
+   *           examples:
+   *             simple:
+   *               summary: Simple question
+   *               value:
+   *                 question: "What is LangChain?"
+   *             with_vector_store:
+   *               summary: With specific vector store
+   *               value:
+   *                 question: "What are the product benefits?"
+   *                 vectorStore: "product_manual"
+   *                 userId: "user123"
+   *                 chatId: "session1"
+   *     responses:
+   *       200:
+   *         description: Response generated successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 answer:
+   *                   type: string
+   *                   description: Response generated by the model
+   *                 sources:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       content:
+   *                         type: string
+   *                       metadata:
+   *                         type: object
+   *                   description: Source documents used
+   *                 vectorStore:
+   *                   type: string
+   *                   description: Vector store used
+   *                 userId:
+   *                   type: string
+   *                   description: User ID
+   *                 chatId:
+   *                   type: string
+   *                   description: Chat ID
+   *       400:
+   *         description: Question required
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *       404:
+   *         description: Vector store not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *                 available:
+   *                   type: array
+   *                   items:
+   *                     type: string
+   *                 message:
+   *                   type: string
+   *       500:
+   *         description: Internal server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *                 message:
+   *                   type: string
+   */
   // Chat endpoint with vector store selection and user/chat context
   app.post('/api/chat', (async (req: Request, res: Response) => {
     try {
@@ -351,6 +649,26 @@ export function createApiServer(
     }
   }) as express.RequestHandler);
 
+  /**
+   * @swagger
+   * /api/users:
+   *   get:
+   *     summary: List all users
+   *     description: Get a list of all users who have chat history
+   *     tags: [Users]
+   *     responses:
+   *       200:
+   *         description: List of users
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 users:
+   *                   type: array
+   *                   items:
+   *                     type: string
+   */
   // Endpoint to list all users
   app.get('/api/users', (_: Request, res: Response) => {
     const users = chatManager.getUsers();
@@ -371,6 +689,49 @@ export function createApiServer(
     res.json({ userId, vectorName, chats });
   });
 
+  /**
+   * @swagger
+   * /api/users/{userId}/vector-stores/{vectorName}/chats/{chatId}:
+   *   delete:
+   *     summary: Clear chat history
+   *     description: Delete chat history for a specific user, vector store, and chat
+   *     tags: [Users]
+   *     parameters:
+   *       - in: path
+   *         name: userId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: User ID
+   *       - in: path
+   *         name: vectorName
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Vector store name
+   *       - in: path
+   *         name: chatId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Chat ID
+   *     responses:
+   *       200:
+   *         description: History deleted successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 message:
+   *                   type: string
+   *                 userId:
+   *                   type: string
+   *                 vectorName:
+   *                   type: string
+   *                 chatId:
+   *                   type: string
+   */
   // Endpoint to clear chat history
   app.delete('/api/users/:userId/vector-stores/:vectorName/chats/:chatId', (req: Request, res: Response) => {
     const { userId, vectorName, chatId } = req.params;
@@ -382,6 +743,61 @@ export function createApiServer(
       chatId
     });
   });
+
+  /**
+   * @swagger
+   * /api/users/{userId}/vector-stores/{vectorName}/chats/{chatId}/messages:
+   *   get:
+   *     summary: Get chat history
+   *     description: Get chat history for a specific user, vector store, and chat
+   *     tags: [Users]
+   *     parameters:
+   *       - in: path
+   *         name: userId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: User ID
+   *       - in: path
+   *         name: vectorName
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Vector store name
+   *       - in: path
+   *         name: chatId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Chat ID
+   *     responses:
+   *       200:
+   *         description: Chat history
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 userId:
+   *                   type: string
+   *                 vectorName:
+   *                   type: string
+   *                 chatId:
+   *                   type: string
+   *                 messages:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       id:
+   *                         type: number
+   *                       question:
+   *                         type: string
+   *                       answer:
+   *                         type: string
+   *                       timestamp:
+   *                         type: string
+   */
 
   // Endpoint to get complete chat history messages
   app.get('/api/users/:userId/vector-stores/:vectorName/chats/:chatId/messages', (req: Request, res: Response) => {
