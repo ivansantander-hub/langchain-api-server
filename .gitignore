@@ -6,3 +6,7 @@ vectorstores/
 .DS_Store
 *.log 
 coverage/
+user-files/
+user-vectorstores/
+chat-histories/
+docs/

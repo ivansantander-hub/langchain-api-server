@@ -117,6 +117,7 @@ export async function initializeChat(): Promise<ChatManagerInitialize> {
         
         // Use conservative model config by default for better accuracy
         const finalModelConfig = modelConfig || conservativeModelConfig;
+        console.log('🚀 ~ processMessage ~ finalModelConfig:', finalModelConfig)
         
         // Create model with final configuration
         model = createLanguageModel(finalModelConfig);
@@ -131,8 +132,28 @@ export async function initializeChat(): Promise<ChatManagerInitialize> {
           retriever = this.vectorStoreManager.getRetriever(storeName, 8, 'mmr');
         }
         
+        // Create effective system prompt that works well with vector stores
+        let effectiveSystemPrompt = `Eres un asistente de IA útil y preciso. Tienes acceso a documentos relevantes que puedes usar para responder preguntas de manera informativa y precisa.
+
+INSTRUCCIONES IMPORTANTES:
+1. Usa la información de los documentos cuando esté disponible para responder
+2. Si encuentras información relevante en los documentos, cítala y úsala
+3. Sé preciso y específico en tus respuestas
+4. Si no tienes información suficiente en los documentos, puedes usar tu conocimiento general
+5. Mantén un tono profesional y útil`;
+
+        // If user has a custom system prompt, append it as additional context but preserve document handling capability
+        if (finalModelConfig.systemPrompt && finalModelConfig.systemPrompt.trim()) {
+          effectiveSystemPrompt += `\n\nINSTRUCCIONES ADICIONALES:
+${finalModelConfig.systemPrompt}
+
+NOTA: Las instrucciones anteriores sobre el uso de documentos siguen siendo importantes. Combina estas instrucciones adicionales con las capacidades de búsqueda en documentos.`;
+        }
+
+        effectiveSystemPrompt += `\n\nResponde en español de manera clara y profesional.`;
+        
         // Create chain with the selected retriever and model
-        chain = createChatChain(model, retriever, finalModelConfig.systemPrompt);
+        chain = createChatChain(model, retriever, effectiveSystemPrompt);
         
         // Get chat history for this user, vector store, and chat
         const history = this.chatHistoryManager.getChatHistory(userId, storeName, chatId);

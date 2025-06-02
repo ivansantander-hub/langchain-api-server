@@ -62,28 +62,20 @@ export class EnhancedVectorStoreManager {
   private embeddings: OpenAIEmbeddings;
   private vectorStores: Map<string, HNSWLib> = new Map();
   private baseDir: string = './vectorstores';
-  private userStoresDir: string = './user-vectorstores';
   private storeMetadata: Map<string, { created: Date; documentCount: number; lastUpdated: Date }> = new Map();
   
   constructor(embeddings: OpenAIEmbeddings) {
     this.embeddings = embeddings;
-    // Ensure directories exist
-    [this.baseDir, this.userStoresDir].forEach(dir => {
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-    });
+    // Ensure directory exists
+    if (!fs.existsSync(this.baseDir)) {
+      fs.mkdirSync(this.baseDir, { recursive: true });
+    }
   }
 
   // Create vector store for user document
   async createUserVectorStore(userId: string, filename: string, documentChunks: Document[]): Promise<HNSWLib> {
-    const userDir = path.join(this.userStoresDir, userId);
-    if (!fs.existsSync(userDir)) {
-      fs.mkdirSync(userDir, { recursive: true });
-    }
-
     const storeName = `${userId}_${filename.replace(/\.[^/.]+$/, "")}`;
-    const storePath = path.join(userDir, filename.replace(/\.[^/.]+$/, ""));
+    const storePath = path.join(this.baseDir, storeName);
     
     console.log(`Creating user vector store: ${storeName} with ${documentChunks.length} chunks`);
 
@@ -98,7 +90,7 @@ export class EnhancedVectorStoreManager {
       // Create embeddings in batches for better reliability
       const store = await this.createStoreWithBatching(validChunks);
       
-      // Save the store
+      // Save the store in the main vectorstores directory
       await store.save(storePath);
       
       // Cache the store
@@ -111,7 +103,7 @@ export class EnhancedVectorStoreManager {
         lastUpdated: new Date()
       });
 
-      console.log(`User vector store ${storeName} created successfully with ${validChunks.length} chunks`);
+      console.log(`User vector store ${storeName} created successfully with ${validChunks.length} chunks in ${storePath}`);
       return store;
       
     } catch (error) {
@@ -192,16 +184,15 @@ export class EnhancedVectorStoreManager {
       return this.vectorStores.get(storeName)!;
     }
 
-    // Try to load from disk
-    const userDir = path.join(this.userStoresDir, userId);
-    const storePath = path.join(userDir, filename.replace(/\.[^/.]+$/, ""));
+    // Try to load from the main vectorstores directory
+    const storePath = path.join(this.baseDir, storeName);
     
     if (!fs.existsSync(storePath)) {
       return null;
     }
 
     try {
-      console.log(`Loading user vector store: ${storeName}`);
+      console.log(`Loading user vector store: ${storeName} from ${storePath}`);
       const store = await HNSWLib.load(storePath, this.embeddings);
       this.vectorStores.set(storeName, store);
       return store;
@@ -213,16 +204,17 @@ export class EnhancedVectorStoreManager {
 
   // List user vector stores
   listUserVectorStores(userId: string): string[] {
-    const userDir = path.join(this.userStoresDir, userId);
-    if (!fs.existsSync(userDir)) {
+    if (!fs.existsSync(this.baseDir)) {
       return [];
     }
 
-    return fs.readdirSync(userDir)
+    // Look for directories that match the user pattern in main vectorstores directory
+    return fs.readdirSync(this.baseDir)
       .filter(item => {
-        const itemPath = path.join(userDir, item);
-        return fs.statSync(itemPath).isDirectory();
-      });
+        const itemPath = path.join(this.baseDir, item);
+        return fs.statSync(itemPath).isDirectory() && item.startsWith(`${userId}_`);
+      })
+      .map(item => item.replace(`${userId}_`, ''));
   }
 
   // Advanced retriever with multiple strategies
@@ -256,20 +248,37 @@ export class EnhancedVectorStoreManager {
   // Perform advanced search with multiple strategies and reranking
   private async performAdvancedSearch(store: HNSWLib, query: string, config: RetrieverConfig): Promise<Document[]> {
     const k = config.k || 8;
-    const threshold = config.searchKwargs?.threshold || 0.6;
+    const threshold = config.searchKwargs?.threshold || 0.4; // Lower threshold for more results
     
-    // 1. Get similarity results with scores
-    const similarityResults = await store.similaritySearchWithScore(query, k * 3);
+    // 1. Get similarity results with scores - get more results initially
+    const similarityResults = await store.similaritySearchWithScore(query, k * 4);
     
-    // 2. Filter by threshold and deduplicate
+    // 2. Apply a lower threshold and include more documents
     const filteredResults = similarityResults
       .filter(([doc, score]) => score >= threshold)
       .map(([doc, score]) => ({ doc, score }));
 
-    // 3. Rerank based on content quality and relevance
+    // 3. If we have very few results, lower the threshold even more
+    if (filteredResults.length < 3 && threshold > 0.2) {
+      console.log(`Low results (${filteredResults.length}), trying with lower threshold`);
+      const lowerThresholdResults = similarityResults
+        .filter(([doc, score]) => score >= 0.2)
+        .map(([doc, score]) => ({ doc, score }));
+      
+      // Use the lower threshold results if we get more documents
+      if (lowerThresholdResults.length > filteredResults.length) {
+        console.log(`Using lower threshold results: ${lowerThresholdResults.length} documents`);
+        const rerankedResults = this.rerankResults(lowerThresholdResults, query);
+        const finalResults = rerankedResults.slice(0, k).map(result => result.doc);
+        console.log(`Advanced search found ${finalResults.length} relevant documents (lowered threshold: 0.2)`);
+        return finalResults;
+      }
+    }
+
+    // 4. Rerank based on content quality and relevance
     const rerankedResults = this.rerankResults(filteredResults, query);
     
-    // 4. Return top k results
+    // 5. Return top k results
     const finalResults = rerankedResults.slice(0, k).map(result => result.doc);
     
     console.log(`Advanced search found ${finalResults.length} relevant documents (threshold: ${threshold})`);
@@ -305,24 +314,51 @@ export class EnhancedVectorStoreManager {
         const content = result.doc.pageContent.toLowerCase();
         let relevanceBoost = 0;
         
-        // Boost for exact phrase matches
+        // Strong boost for exact phrase matches
         if (content.includes(queryLower)) {
-          relevanceBoost += 0.2;
+          relevanceBoost += 0.3;
         }
         
-        // Boost for multiple query word matches
-        const matchingWords = queryWords.filter(word => content.includes(word));
-        relevanceBoost += (matchingWords.length / queryWords.length) * 0.1;
+        // Boost for partial phrase matches (significant portions of the query)
+        const queryPhrases = this.extractPhrases(queryLower);
+        queryPhrases.forEach(phrase => {
+          if (content.includes(phrase)) {
+            relevanceBoost += 0.15;
+          }
+        });
         
-        // Boost for content quality
+        // Boost for multiple query word matches with proximity consideration
+        const matchingWords = queryWords.filter(word => content.includes(word));
+        const wordMatchRatio = matchingWords.length / queryWords.length;
+        relevanceBoost += wordMatchRatio * 0.2;
+        
+        // Extra boost if most query words appear close to each other
+        if (matchingWords.length >= 2) {
+          const proximity = this.calculateWordProximity(content, matchingWords);
+          relevanceBoost += proximity * 0.1;
+        }
+        
+        // Boost for content quality metrics
         const metadata = result.doc.metadata;
         if (metadata.quality === 'high') {
           relevanceBoost += 0.05;
         }
         
-        // Boost for complete thoughts
+        // Boost for complete thoughts and well-structured content
         if (metadata.sentenceCount && metadata.sentenceCount > 1) {
           relevanceBoost += 0.03;
+        }
+        
+        // Boost for adequate content length (not too short or too long)
+        const contentLength = content.length;
+        if (contentLength >= 100 && contentLength <= 2000) {
+          relevanceBoost += 0.02;
+        }
+        
+        // Boost documents that start with relevant content
+        const firstSentence = content.split('.')[0].toLowerCase();
+        if (queryWords.some(word => firstSentence.includes(word))) {
+          relevanceBoost += 0.05;
         }
         
         return {
@@ -333,6 +369,58 @@ export class EnhancedVectorStoreManager {
       .sort((a, b) => b.score - a.score);
   }
 
+  // Extract meaningful phrases from query (2-3 word combinations)
+  private extractPhrases(query: string): string[] {
+    const words = query.split(/\s+/).filter(word => word.length > 2);
+    const phrases: string[] = [];
+    
+    // Extract 2-word phrases
+    for (let i = 0; i < words.length - 1; i++) {
+      phrases.push(`${words[i]} ${words[i + 1]}`);
+    }
+    
+    // Extract 3-word phrases
+    for (let i = 0; i < words.length - 2; i++) {
+      phrases.push(`${words[i]} ${words[i + 1]} ${words[i + 2]}`);
+    }
+    
+    return phrases;
+  }
+
+  // Calculate how close query words appear to each other in the content
+  private calculateWordProximity(content: string, matchingWords: string[]): number {
+    if (matchingWords.length < 2) return 0;
+    
+    const words = content.split(/\s+/);
+    const positions = matchingWords.map(word => {
+      for (let i = 0; i < words.length; i++) {
+        if (words[i].includes(word)) {
+          return i;
+        }
+      }
+      return -1;
+    }).filter(pos => pos !== -1);
+    
+    if (positions.length < 2) return 0;
+    
+    // Calculate average distance between matching words
+    let totalDistance = 0;
+    let comparisons = 0;
+    
+    for (let i = 0; i < positions.length - 1; i++) {
+      for (let j = i + 1; j < positions.length; j++) {
+        totalDistance += Math.abs(positions[i] - positions[j]);
+        comparisons++;
+      }
+    }
+    
+    const averageDistance = totalDistance / comparisons;
+    
+    // Convert distance to proximity score (closer = higher score)
+    // Maximum useful distance is about 20 words
+    return Math.max(0, 1 - (averageDistance / 20));
+  }
+
   // Check if user vector store exists
   userVectorStoreExists(userId: string, filename: string): boolean {
     const storeName = `${userId}_${filename.replace(/\.[^/.]+$/, "")}`;
@@ -341,8 +429,7 @@ export class EnhancedVectorStoreManager {
       return true;
     }
     
-    const userDir = path.join(this.userStoresDir, userId);
-    const storePath = path.join(userDir, filename.replace(/\.[^/.]+$/, ""));
+    const storePath = path.join(this.baseDir, storeName);
     return fs.existsSync(storePath);
   }
 

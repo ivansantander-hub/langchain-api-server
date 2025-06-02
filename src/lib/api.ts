@@ -71,12 +71,12 @@ export function createApiServer(
    * @swagger
    * /api/health:
    *   get:
-   *     summary: Server health check
-   *     description: Endpoint to verify server health status and get system information
-   *     tags: [Health]
+   *     summary: Health check
+   *     description: Server health status
+   *     tags: [System]
    *     responses:
    *       200:
-   *         description: Server running correctly
+   *         description: Server is healthy
    *         content:
    *           application/json:
    *             schema:
@@ -84,14 +84,11 @@ export function createApiServer(
    *               properties:
    *                 status:
    *                   type: string
+   *                   example: "healthy"
    *                 timestamp:
    *                   type: string
    *                 uptime:
    *                   type: number
-   *                 memory:
-   *                   type: object
-   *                 version:
-   *                   type: string
    *                 vectorStores:
    *                   type: number
    */
@@ -112,8 +109,8 @@ export function createApiServer(
    * /api:
    *   get:
    *     summary: API information
-   *     description: Get general information about the API and its available endpoints
-   *     tags: [Health]
+   *     description: Available endpoints overview
+   *     tags: [System]
    *     responses:
    *       200:
    *         description: API information
@@ -156,8 +153,8 @@ export function createApiServer(
    * @swagger
    * /api/vector-stores:
    *   get:
-   *     summary: Get available vector stores
-   *     description: List all available vector stores in the system
+   *     summary: List vector stores
+   *     description: Get all available vector stores
    *     tags: [Vector Stores]
    *     responses:
    *       200:
@@ -173,6 +170,7 @@ export function createApiServer(
    *                     type: string
    *                 default:
    *                   type: string
+   *                   example: "combined"
    */
   // Endpoint to list all available vector stores
   app.get('/api/vector-stores', (_: Request, res: Response) => {
@@ -225,12 +223,12 @@ export function createApiServer(
    * @swagger
    * /api/models:
    *   get:
-   *     summary: Get available models (cached)
-   *     description: List available OpenAI models from local cache
+   *     summary: List available models
+   *     description: Get cached OpenAI models
    *     tags: [Models]
    *     responses:
    *       200:
-   *         description: List of available models
+   *         description: Available models
    *         content:
    *           application/json:
    *             schema:
@@ -322,9 +320,9 @@ export function createApiServer(
    * @swagger
    * /api/upload-file:
    *   post:
-   *     summary: Upload text file for user
-   *     description: Upload a text file to user's directory (txt files only)
-   *     tags: [Documents]
+   *     summary: Upload text file
+   *     description: Upload a text file for a user
+   *     tags: [Files]
    *     requestBody:
    *       required: true
    *       content:
@@ -338,20 +336,13 @@ export function createApiServer(
    *             properties:
    *               userId:
    *                 type: string
-   *                 description: User ID to organize files
+   *                 example: "user123"
    *               filename:
    *                 type: string
-   *                 description: Name of the text file (will add .txt if missing)
+   *                 example: "my-document.txt"
    *               content:
    *                 type: string
-   *                 description: Text content of the file
-   *           examples:
-   *             text_document:
-   *               summary: User text document
-   *               value:
-   *                 userId: "user123"
-   *                 filename: "my-notes"
-   *                 content: "This is my note content with important information..."
+   *                 example: "Document content here..."
    *     responses:
    *       200:
    *         description: File uploaded successfully
@@ -371,34 +362,11 @@ export function createApiServer(
    *                 ready_for_vectorization:
    *                   type: boolean
    *       400:
-   *         description: Invalid input data
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: object
-   *               properties:
-   *                 error:
-   *                   type: string
+   *         description: Invalid input
    *       413:
    *         description: File too large
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: object
-   *               properties:
-   *                 error:
-   *                   type: string
    *       500:
-   *         description: Error uploading file
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: object
-   *               properties:
-   *                 error:
-   *                   type: string
-   *                 details:
-   *                   type: string
+   *         description: Server error
    */
   // New endpoint to upload files only (no vectorization)
   app.post('/api/upload-file', (async (req: Request, res: Response) => {
@@ -442,8 +410,8 @@ export function createApiServer(
    * @swagger
    * /api/load-vector:
    *   post:
-   *     summary: Vectorize uploaded text file
-   *     description: Process an uploaded text file and create vector embeddings for search
+   *     summary: Vectorize file
+   *     description: Create vector embeddings from uploaded file
    *     tags: [Vector Stores]
    *     requestBody:
    *       required: true
@@ -457,16 +425,10 @@ export function createApiServer(
    *             properties:
    *               userId:
    *                 type: string
-   *                 description: User ID who owns the file
+   *                 example: "user123"
    *               filename:
    *                 type: string
-   *                 description: Name of the uploaded file to vectorize
-   *           examples:
-   *             vectorize_file:
-   *               summary: Vectorize user file
-   *               value:
-   *                 userId: "user123"
-   *                 filename: "my-notes.txt"
+   *                 example: "my-document.txt"
    *     responses:
    *       200:
    *         description: File vectorized successfully
@@ -489,24 +451,8 @@ export function createApiServer(
    *                   type: boolean
    *       400:
    *         description: Invalid input or file not found
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: object
-   *               properties:
-   *                 error:
-   *                   type: string
    *       500:
-   *         description: Error during vectorization
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: object
-   *               properties:
-   *                 error:
-   *                   type: string
-   *                 details:
-   *                   type: string
+   *         description: Vectorization failed
    */
   // New endpoint to vectorize uploaded files
   app.post('/api/load-vector', (async (req: Request, res: Response) => {
@@ -564,8 +510,8 @@ export function createApiServer(
    * @swagger
    * /api/chat:
    *   post:
-   *     summary: Send message to chat
-   *     description: Process a question and return a response based on indexed documents
+   *     summary: Chat with documents
+   *     description: Ask questions about uploaded documents
    *     tags: [Chat]
    *     requestBody:
    *       required: true
@@ -578,34 +524,24 @@ export function createApiServer(
    *             properties:
    *               question:
    *                 type: string
-   *                 description: The question to ask
+   *                 example: "What is this document about?"
    *               vectorStore:
    *                 type: string
-   *                 description: Specific vector store to use
+   *                 example: "combined"
    *               userId:
    *                 type: string
-   *                 description: User ID for chat context
+   *                 example: "user123"
    *               chatId:
    *                 type: string
-   *                 description: Chat ID for conversation context
+   *                 example: "session1"
+   *               filename:
+   *                 type: string
+   *                 example: "my-document.txt"
    *               modelConfig:
    *                 type: object
-   *                 description: Model configuration options
-   *           examples:
-   *             simple:
-   *               summary: Simple question
-   *               value:
-   *                 question: "What is LangChain?"
-   *             with_vector_store:
-   *               summary: With specific vector store
-   *               value:
-   *                 question: "What are the product benefits?"
-   *                 vectorStore: "product_manual"
-   *                 userId: "user123"
-   *                 chatId: "session1"
    *     responses:
    *       200:
-   *         description: Response generated successfully
+   *         description: Chat response
    *         content:
    *           application/json:
    *             schema:
@@ -613,7 +549,6 @@ export function createApiServer(
    *               properties:
    *                 answer:
    *                   type: string
-   *                   description: Response generated by the model
    *                 sources:
    *                   type: array
    *                   items:
@@ -623,51 +558,18 @@ export function createApiServer(
    *                         type: string
    *                       metadata:
    *                         type: object
-   *                   description: Source documents used
    *                 vectorStore:
    *                   type: string
-   *                   description: Vector store used
    *                 userId:
    *                   type: string
-   *                   description: User ID
    *                 chatId:
    *                   type: string
-   *                   description: Chat ID
    *       400:
    *         description: Question required
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: object
-   *               properties:
-   *                 error:
-   *                   type: string
    *       404:
    *         description: Vector store not found
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: object
-   *               properties:
-   *                 error:
-   *                   type: string
-   *                 available:
-   *                   type: array
-   *                   items:
-   *                     type: string
-   *                 message:
-   *                   type: string
    *       500:
-   *         description: Internal server error
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: object
-   *               properties:
-   *                 error:
-   *                   type: string
-   *                 message:
-   *                   type: string
+   *         description: Processing failed
    */
   // Enhanced chat endpoint with user vector store support
   app.post('/api/chat', (async (req: Request, res: Response) => {
@@ -720,26 +622,101 @@ export function createApiServer(
       let response;
       
       if (usingUserStore) {
-        // Use enhanced vector manager for user stores
+        // Use enhanced vector manager for user stores with proper AI chat
         const userVectorStore = await enhancedVectorManager.getUserVectorStore(userId!, filename!);
         if (!userVectorStore) {
           throw new Error('User vector store became unavailable');
         }
         
+        // Get relevant documents first
         const retriever = enhancedVectorManager.getAdvancedRetriever(selectedStore, {
-          k: 8,
+          k: 12,
           searchType: 'advanced',
-          searchKwargs: { threshold: 0.6 }
+          searchKwargs: { threshold: 0.5 }
         });
         
         const relevantDocs = await retriever.getRelevantDocuments(question);
+        console.log(`Found ${relevantDocs.length} relevant documents for question: "${question}"`);
         
-        // For now, we'll use a simple response format
-        // In a real implementation, you'd integrate this with your chat manager
-        response = {
-          text: `Based on your document "${filename}", I found ${relevantDocs.length} relevant sections. Here's what I can tell you: ${relevantDocs.length > 0 ? relevantDocs[0].pageContent.substring(0, 200) + '...' : 'No relevant information found.'}`,
-          sourceDocuments: relevantDocs
-        };
+        if (relevantDocs.length === 0) {
+          // If no relevant docs found, provide a helpful response
+          response = {
+            text: `No encontré información específica sobre "${question}" en el documento "${filename}". El documento parece contener otro tipo de información. ¿Podrías reformular tu pregunta o preguntarme sobre el contenido general del documento?`,
+            sourceDocuments: []
+          };
+        } else {
+          // Use the chat manager's model and approach but with user store retriever
+          const { createLanguageModel, createChatChain, formatChatHistory } = await import('./model.js');
+          
+          // Create a custom model config that preserves user settings but overrides system prompt for documents
+          const documentModelConfig = {
+            ...modelConfig, // Preserve user's temperature, maxTokens, etc.
+            // Don't use the user's system prompt for document chat - we need our specialized one
+          };
+          
+          const model = createLanguageModel(documentModelConfig);
+          
+          // Create a more effective system prompt that emphasizes document usage
+          const documentContext = relevantDocs.map((doc, index) => 
+            `Documento ${index + 1}:\n${doc.pageContent}\n`
+          ).join('\n---\n');
+          
+          // Create a specialized prompt that combines user preferences with document handling
+          let effectivePrompt = `Eres un asistente de IA experto en análisis de documentos.
+
+TIENES ACCESO COMPLETO al documento "${filename}" del usuario y DEBES usar esta información para responder.
+
+CONTEXTO DEL DOCUMENTO:
+${documentContext}
+
+INSTRUCCIONES IMPORTANTES:
+1. SIEMPRE utiliza la información del documento para responder
+2. Sé específico y cita partes relevantes del documento
+3. Si la pregunta está relacionada con el contenido del documento, responde basándote EN ESA INFORMACIÓN
+4. Proporciona respuestas detalladas y útiles basadas en el contenido disponible
+5. Si necesitas aclaración, pregunta específicamente sobre qué parte del documento necesita más información`;
+
+          // If user has a custom system prompt, append it as additional context but keep document priority
+          if (modelConfig?.systemPrompt && modelConfig.systemPrompt.trim()) {
+            effectivePrompt += `\n\nINSTRUCCIONES ADICIONALES DEL USUARIO:
+${modelConfig.systemPrompt}
+
+IMPORTANTE: Las instrucciones anteriores sobre usar el documento y contexto siempre tienen prioridad. Usa estas instrucciones adicionales solo como contexto complementario.`;
+          }
+
+          effectivePrompt += `\n\nResponde en español de manera clara y profesional.`;
+          
+          // Create a custom retriever that returns the relevant docs we already found
+          const customRetriever = {
+            getRelevantDocuments: async () => relevantDocs
+          };
+          
+          const chain = createChatChain(model, customRetriever, effectivePrompt);
+          
+          // Get chat history for this user and store
+          const history = chatManager.chatHistoryManager.getChatHistory(userIdToUse, selectedStore, chatIdToUse);
+          const formattedHistory = formatChatHistory(history);
+          
+          // Generate AI response
+          const aiResponse = await chain.invoke({
+            input: question,
+            chat_history: formattedHistory,
+          });
+          
+          const responseText = typeof aiResponse.content === 'string' 
+            ? aiResponse.content 
+            : typeof aiResponse === 'string' 
+            ? aiResponse
+            : JSON.stringify(aiResponse.content || aiResponse);
+          
+          // Update chat history
+          chatManager.chatHistoryManager.addExchange(userIdToUse, selectedStore, chatIdToUse, question, responseText);
+          
+          response = {
+            text: responseText,
+            sourceDocuments: relevantDocs
+          };
+        }
       } else {
         // Use legacy chat manager for system stores
         response = await chatManager.processMessage(
@@ -781,8 +758,8 @@ export function createApiServer(
    * @swagger
    * /api/users:
    *   get:
-   *     summary: List all users
-   *     description: Get a list of all users who have chat history
+   *     summary: List users
+   *     description: Get all users with chat history
    *     tags: [Users]
    *     responses:
    *       200:
@@ -822,7 +799,7 @@ export function createApiServer(
    * /api/users/{userId}/vector-stores/{vectorName}/chats/{chatId}:
    *   delete:
    *     summary: Clear chat history
-   *     description: Delete chat history for a specific user, vector store, and chat
+   *     description: Delete chat history for specific context
    *     tags: [Users]
    *     parameters:
    *       - in: path
@@ -830,22 +807,22 @@ export function createApiServer(
    *         required: true
    *         schema:
    *           type: string
-   *         description: User ID
+   *         example: "user123"
    *       - in: path
    *         name: vectorName
    *         required: true
    *         schema:
    *           type: string
-   *         description: Vector store name
+   *         example: "combined"
    *       - in: path
    *         name: chatId
    *         required: true
    *         schema:
    *           type: string
-   *         description: Chat ID
+   *         example: "session1"
    *     responses:
    *       200:
-   *         description: History deleted successfully
+   *         description: History cleared successfully
    *         content:
    *           application/json:
    *             schema:
@@ -877,7 +854,7 @@ export function createApiServer(
    * /api/users/{userId}/vector-stores/{vectorName}/chats/{chatId}/messages:
    *   get:
    *     summary: Get chat history
-   *     description: Get chat history for a specific user, vector store, and chat
+   *     description: Retrieve chat messages for specific context
    *     tags: [Users]
    *     parameters:
    *       - in: path
@@ -885,19 +862,19 @@ export function createApiServer(
    *         required: true
    *         schema:
    *           type: string
-   *         description: User ID
+   *         example: "user123"
    *       - in: path
    *         name: vectorName
    *         required: true
    *         schema:
    *           type: string
-   *         description: Vector store name
+   *         example: "combined"
    *       - in: path
    *         name: chatId
    *         required: true
    *         schema:
    *           type: string
-   *         description: Chat ID
+   *         example: "session1"
    *     responses:
    *       200:
    *         description: Chat history
