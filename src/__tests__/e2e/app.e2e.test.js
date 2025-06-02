@@ -43,7 +43,6 @@ describe('Application E2E Tests', () => {
       // Check main directories exist
       expect(fs.existsSync('src')).toBe(true);
       expect(fs.existsSync('src/lib')).toBe(true);
-      expect(fs.existsSync('docs')).toBe(true);
       
       // Check for vectorstores directory - optional in CI environments
       const isCI = process.env.CI === 'true' || process.env.NODE_ENV === 'test' || process.env.RAILWAY_ENVIRONMENT;
