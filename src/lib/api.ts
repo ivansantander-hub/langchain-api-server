@@ -2,9 +2,9 @@ import express, { Request, Response, RequestHandler } from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { VectorStoreManager } from './vectorstore.js';
+import { VectorStoreManager, EnhancedVectorStoreManager, createBalancedEmbeddings } from './vectorstore.js';
 import { availableModels, defaultModelConfig, ModelConfig } from './model.js';
-import { saveUploadedDocument, loadSingleDocument, splitDocuments } from './document.js';
+import { saveUploadedDocument, loadSingleDocument, splitDocuments, UserFileManager, loadUserDocument, splitDocumentsAdvanced } from './document.js';
 import OpenAI from 'openai';
 import { ChatHistoryManager } from './chatHistory.js';
 import { specs, swaggerUi } from './swagger.js';
@@ -31,6 +31,10 @@ export function createApiServer(
   chatManager: ChatManager,
   vectorStoreManager: VectorStoreManager
 ) {
+  // Initialize enhanced components
+  const embeddings = createBalancedEmbeddings();
+  const enhancedVectorManager = new EnhancedVectorStoreManager(embeddings);
+  const userFileManager = new UserFileManager();
   const app = express();
   const PORT = process.env.PORT || 3000;
 
@@ -179,6 +183,44 @@ export function createApiServer(
     });
   });
 
+  // Endpoint to list user files
+  app.get('/api/users/:userId/files', (req: Request, res: Response) => {
+    const { userId } = req.params;
+    const files = userFileManager.listUserFiles(userId);
+    
+    const filesWithStats = files.map(filename => {
+      const stats = userFileManager.getFileStats(userId, filename);
+      const isVectorized = enhancedVectorManager.userVectorStoreExists(userId, filename);
+      
+      return {
+        filename,
+        size: stats?.size || 0,
+        created: stats?.created || new Date(),
+        modified: stats?.modified || new Date(),
+        vectorized: isVectorized,
+        ready_for_chat: isVectorized
+      };
+    });
+    
+    res.json({ 
+      userId,
+      files: filesWithStats,
+      total: files.length
+    });
+  });
+
+  // Endpoint to list user vector stores
+  app.get('/api/users/:userId/vector-stores', (req: Request, res: Response) => {
+    const { userId } = req.params;
+    const vectorStores = enhancedVectorManager.listUserVectorStores(userId);
+    
+    res.json({ 
+      userId, 
+      vectorStores,
+      total: vectorStores.length
+    });
+  });
+
   /**
    * @swagger
    * /api/models:
@@ -278,10 +320,10 @@ export function createApiServer(
 
   /**
    * @swagger
-   * /api/add-document:
+   * /api/upload-file:
    *   post:
-   *     summary: Upload document to system
-   *     description: Upload a document (text or PDF) and add it to vector stores for search
+   *     summary: Upload text file for user
+   *     description: Upload a text file to user's directory (txt files only)
    *     tags: [Documents]
    *     requestBody:
    *       required: true
@@ -290,29 +332,29 @@ export function createApiServer(
    *           schema:
    *             type: object
    *             required:
+   *               - userId
    *               - filename
    *               - content
    *             properties:
+   *               userId:
+   *                 type: string
+   *                 description: User ID to organize files
    *               filename:
    *                 type: string
-   *                 description: Name of the file to upload
+   *                 description: Name of the text file (will add .txt if missing)
    *               content:
    *                 type: string
-   *                 description: Content of the file (text or base64 for PDF)
+   *                 description: Text content of the file
    *           examples:
    *             text_document:
-   *               summary: Text document
+   *               summary: User text document
    *               value:
-   *                 filename: "manual.txt"
-   *                 content: "This is the manual content..."
-   *             pdf_document:
-   *               summary: PDF document
-   *               value:
-   *                 filename: "guide.pdf"
-   *                 content: "JVBERi0xLjQKJeLjz9MKMSAwIG9iagpbPD4+XQplbmRvYmoKMiAwIG9iagpbPD4+XQplbmRvYmoK..."
+   *                 userId: "user123"
+   *                 filename: "my-notes"
+   *                 content: "This is my note content with important information..."
    *     responses:
    *       200:
-   *         description: Document processed successfully
+   *         description: File uploaded successfully
    *         content:
    *           application/json:
    *             schema:
@@ -320,16 +362,14 @@ export function createApiServer(
    *               properties:
    *                 message:
    *                   type: string
-   *                 chunks:
-   *                   type: number
-   *                 pages:
-   *                   type: number
-   *                 contentPreview:
+   *                 userId:
    *                   type: string
-   *                 vectorStores:
-   *                   type: array
-   *                   items:
-   *                     type: string
+   *                 filename:
+   *                   type: string
+   *                 size:
+   *                   type: number
+   *                 ready_for_vectorization:
+   *                   type: boolean
    *       400:
    *         description: Invalid input data
    *         content:
@@ -349,7 +389,7 @@ export function createApiServer(
    *                 error:
    *                   type: string
    *       500:
-   *         description: Error processing document
+   *         description: Error uploading file
    *         content:
    *           application/json:
    *             schema:
@@ -359,119 +399,163 @@ export function createApiServer(
    *                   type: string
    *                 details:
    *                   type: string
-   *                 filename:
-   *                   type: string
    */
-  // Endpoint to add a document to vector stores
-  app.post('/api/add-document', (async (req: Request, res: Response) => {
-    let savedFilename: string | null = null;
-    
+  // New endpoint to upload files only (no vectorization)
+  app.post('/api/upload-file', (async (req: Request, res: Response) => {
     try {
-      const { filename, content } = req.body;
+      const { userId, filename, content } = req.body;
       
-      if (!filename || !content) {
-        return res.status(400).json({ error: 'filename and content are required' });
+      if (!userId || !filename || !content) {
+        return res.status(400).json({ error: 'userId, filename and content are required' });
       }
 
-      console.log(`Received document upload request: ${filename}`);
-      console.log(`Content type: ${filename.toLowerCase().endsWith('.pdf') ? 'PDF (base64)' : 'Text'}`);
-      
-      // Validate file size (prevent memory issues)
-      if (content.length > 50000000) { // 50MB limit for base64 content
-        return res.status(413).json({ error: 'File too large. Maximum size is 50MB.' });
+      // Validate content size (10MB limit for text)
+      if (content.length > 10000000) {
+        return res.status(413).json({ error: 'File too large. Maximum size is 10MB for text files.' });
       }
+
+      console.log(`Uploading file for user ${userId}: ${filename}`);
       
-      // Handle PDF files differently
-      if (filename.toLowerCase().endsWith('.pdf')) {
-        console.log('Processing PDF file...');
-        
-        // For PDF files, content is base64 encoded, we need to save it as binary
-        const fs = require('fs');
-        const path = require('path');
-        
-        // Ensure docs directory exists
-        if (!fs.existsSync('./docs')) {
-          fs.mkdirSync('./docs', { recursive: true });
-        }
-        
-        savedFilename = filename;
-        const filepath = path.join('./docs', savedFilename);
-        
-        // Decode base64 and save as binary PDF
-        const binaryContent = Buffer.from(content, 'base64');
-        fs.writeFileSync(filepath, binaryContent);
-        console.log(`PDF saved to: ${filepath} (${binaryContent.length} bytes)`);
-        
-      } else {
-        // For text files, save as before
-        savedFilename = await saveUploadedDocument(content, filename);
-        console.log(`Text document saved: ${savedFilename}`);
-      }
+      const savedFilename = await userFileManager.saveUserFile(userId, filename, content);
+      const fileStats = userFileManager.getFileStats(userId, savedFilename);
       
-      // Load and process the document
-      console.log('Loading document...');
-      if (!savedFilename) {
-        throw new Error('Failed to save document');
-      }
-      const docLoaded = await loadSingleDocument(savedFilename);
-      console.log(`Document loaded with ${docLoaded.length} pages/sections`);
-      
-      // Verify we have content
-      if (docLoaded.length === 0) {
-        throw new Error('No content could be extracted from the document');
-      }
-      
-      // Check content quality
-      const totalContent = docLoaded.map(doc => doc.pageContent).join(' ').trim();
-      if (totalContent.length < 10) {
-        console.warn('Warning: Very little content extracted from document');
-      }
-      
-      console.log(`Extracted content preview: ${totalContent.substring(0, 200)}...`);
-      
-      console.log('Splitting document...');
-      const docChunks = await splitDocuments(docLoaded);
-      console.log(`Document split into ${docChunks.length} chunks`);
-      
-      // Add to vector stores (individual and combined)
-      console.log('Adding to vector stores...');
-      await vectorStoreManager.addDocumentToVectorStores(savedFilename, docChunks);
-      
-      console.log(`Document ${savedFilename} processing completed successfully`);
+      console.log(`File uploaded successfully: ${userId}/${savedFilename}`);
       
       res.json({ 
-        message: `Document ${savedFilename} successfully added to vector stores`,
-        chunks: docChunks.length,
-        pages: docLoaded.length,
-        contentPreview: totalContent.substring(0, 150) + (totalContent.length > 150 ? '...' : ''),
-        vectorStores: [
-          savedFilename.replace(/\.[^/.]+$/, ""), // Individual store
-          'combined' // Combined store
-        ]
+        message: `File ${savedFilename} uploaded successfully for user ${userId}`,
+        userId,
+        filename: savedFilename,
+        size: fileStats?.size || 0,
+        ready_for_vectorization: true
       });
     } catch (error) {
-      console.error('Error processing document upload:', error);
-      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack available');
-      
-      // Attempt to clean up partially saved file if error occurred after saving
-      if (savedFilename) {
-        try {
-          const fs = require('fs');
-          const path = require('path');
-          const filepath = path.join('./docs', savedFilename);
-          if (fs.existsSync(filepath)) {
-            console.log(`Cleaning up partially processed file: ${savedFilename}`);
-            // Don't delete - keep the file for manual retry
-          }
-        } catch (cleanupError) {
-          console.error('Error during cleanup:', cleanupError);
-        }
-      }
+      console.error('Error uploading file:', error);
       
       res.status(500).json({ 
-        error: 'Failed to process document upload',
-        details: error instanceof Error ? error.message : 'Unknown error',
-        filename: savedFilename
+        error: 'Failed to upload file',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }) as express.RequestHandler);
+
+  /**
+   * @swagger
+   * /api/load-vector:
+   *   post:
+   *     summary: Vectorize uploaded text file
+   *     description: Process an uploaded text file and create vector embeddings for search
+   *     tags: [Vector Stores]
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - userId
+   *               - filename
+   *             properties:
+   *               userId:
+   *                 type: string
+   *                 description: User ID who owns the file
+   *               filename:
+   *                 type: string
+   *                 description: Name of the uploaded file to vectorize
+   *           examples:
+   *             vectorize_file:
+   *               summary: Vectorize user file
+   *               value:
+   *                 userId: "user123"
+   *                 filename: "my-notes.txt"
+   *     responses:
+   *       200:
+   *         description: File vectorized successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 message:
+   *                   type: string
+   *                 userId:
+   *                   type: string
+   *                 filename:
+   *                   type: string
+   *                 chunks:
+   *                   type: number
+   *                 vectorStoreId:
+   *                   type: string
+   *                 ready_for_chat:
+   *                   type: boolean
+   *       400:
+   *         description: Invalid input or file not found
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *       500:
+   *         description: Error during vectorization
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   *                 details:
+   *                   type: string
+   */
+  // New endpoint to vectorize uploaded files
+  app.post('/api/load-vector', (async (req: Request, res: Response) => {
+    try {
+      const { userId, filename } = req.body;
+      
+      if (!userId || !filename) {
+        return res.status(400).json({ error: 'userId and filename are required' });
+      }
+
+      // Check if file exists
+      if (!userFileManager.userFileExists(userId, filename)) {
+        return res.status(400).json({ error: `File ${filename} not found for user ${userId}. Upload it first using /api/upload-file` });
+      }
+
+      console.log(`Starting vectorization for user ${userId}, file: ${filename}`);
+      
+      // Load the user document
+      const documents = await loadUserDocument(userId, filename);
+      console.log(`Loaded ${documents.length} document sections`);
+      
+      // Split documents with advanced chunking
+      const chunks = await splitDocumentsAdvanced(documents);
+      console.log(`Created ${chunks.length} high-quality chunks`);
+      
+      if (chunks.length === 0) {
+        throw new Error('No valid chunks could be created from the document');
+      }
+      
+      // Create user vector store
+      const vectorStore = await enhancedVectorManager.createUserVectorStore(userId, filename, chunks);
+      const vectorStoreId = `${userId}_${filename.replace(/\.[^/.]+$/, "")}`;
+      
+      console.log(`Vector store created successfully: ${vectorStoreId}`);
+      
+      res.json({ 
+        message: `File ${filename} vectorized successfully for user ${userId}`,
+        userId,
+        filename,
+        chunks: chunks.length,
+        vectorStoreId,
+        ready_for_chat: true
+      });
+    } catch (error) {
+      console.error('Error during vectorization:', error);
+      
+      res.status(500).json({ 
+        error: 'Failed to vectorize file',
+        details: error instanceof Error ? error.message : 'Unknown error'
       });
     }
   }) as express.RequestHandler);
@@ -585,45 +669,87 @@ export function createApiServer(
    *                 message:
    *                   type: string
    */
-  // Chat endpoint with vector store selection and user/chat context
+  // Enhanced chat endpoint with user vector store support
   app.post('/api/chat', (async (req: Request, res: Response) => {
     try {
-      const { question, vectorStore, userId, chatId, modelConfig } = req.body;
+      const { question, vectorStore, userId, chatId, modelConfig, filename } = req.body;
       
       if (!question) {
         res.status(400).json({ error: 'Question is required' });
         return;
       }
 
-      // Validate if provided vectorStore exists
-      if (vectorStore && !vectorStoreManager.storeExists(vectorStore)) {
-        const availableStores = vectorStoreManager.getAvailableStores();
-        console.log(`Vector store "${vectorStore}" not found. Available stores:`, availableStores);
-        return res.status(404).json({ 
-          error: `Vector store "${vectorStore}" not found`,
-          available: availableStores,
-          message: availableStores.length > 0 ? 
-            `Available stores: ${availableStores.join(', ')}` : 
-            'No vector stores available. Upload documents to create them.'
-        });
-      }
-
       // Use default user and chat IDs if not provided
       const userIdToUse = userId || 'default';
       const chatIdToUse = chatId || 'default';
-      const selectedStore = vectorStore || 'combined';
+
+      let selectedStore = vectorStore || 'combined';
+      let usingUserStore = false;
+
+      // Check if user wants to use their own vectorized file
+      if (userId && filename) {
+        // Try to use user's vector store for specific file
+        const userVectorStore = await enhancedVectorManager.getUserVectorStore(userId, filename);
+        if (userVectorStore) {
+          selectedStore = `${userId}_${filename.replace(/\.[^/.]+$/, "")}`;
+          usingUserStore = true;
+          console.log(`Using user vector store: ${selectedStore}`);
+        } else {
+          return res.status(404).json({ 
+            error: `Vector store for file "${filename}" not found for user "${userId}". Vectorize the file first using /api/load-vector`,
+            suggestion: 'Use /api/load-vector to vectorize your uploaded file first'
+          });
+        }
+      } else if (vectorStore) {
+        // Validate if provided vectorStore exists (legacy stores)
+        if (!vectorStoreManager.storeExists(vectorStore)) {
+          const availableStores = vectorStoreManager.getAvailableStores();
+          console.log(`Vector store "${vectorStore}" not found. Available stores:`, availableStores);
+          return res.status(404).json({ 
+            error: `Vector store "${vectorStore}" not found`,
+            available: availableStores,
+            message: availableStores.length > 0 ? 
+              `Available stores: ${availableStores.join(', ')}` : 
+              'No vector stores available. Upload documents to create them.'
+          });
+        }
+      }
 
       console.log(`Received question from User ${userIdToUse}, Chat ${chatIdToUse}, Store ${selectedStore}: ${question}`);
       
-      console.log(`Using vector store: ${selectedStore}`);
+      let response;
       
-      const response = await chatManager.processMessage(
-        question, 
-        userIdToUse, 
-        chatIdToUse, 
-        selectedStore,
-        modelConfig
-      );
+      if (usingUserStore) {
+        // Use enhanced vector manager for user stores
+        const userVectorStore = await enhancedVectorManager.getUserVectorStore(userId!, filename!);
+        if (!userVectorStore) {
+          throw new Error('User vector store became unavailable');
+        }
+        
+        const retriever = enhancedVectorManager.getAdvancedRetriever(selectedStore, {
+          k: 8,
+          searchType: 'advanced',
+          searchKwargs: { threshold: 0.6 }
+        });
+        
+        const relevantDocs = await retriever.getRelevantDocuments(question);
+        
+        // For now, we'll use a simple response format
+        // In a real implementation, you'd integrate this with your chat manager
+        response = {
+          text: `Based on your document "${filename}", I found ${relevantDocs.length} relevant sections. Here's what I can tell you: ${relevantDocs.length > 0 ? relevantDocs[0].pageContent.substring(0, 200) + '...' : 'No relevant information found.'}`,
+          sourceDocuments: relevantDocs
+        };
+      } else {
+        // Use legacy chat manager for system stores
+        response = await chatManager.processMessage(
+          question, 
+          userIdToUse, 
+          chatIdToUse, 
+          selectedStore,
+          modelConfig
+        );
+      }
       
       res.json({
         answer: response.text,
@@ -634,10 +760,12 @@ export function createApiServer(
           })) : [],
         vectorStore: selectedStore,
         userId: userIdToUse,
-        chatId: chatIdToUse
+        chatId: chatIdToUse,
+        usingUserStore,
+        filename: filename || null
       });
       
-      console.log(`Response to User ${userIdToUse}, Chat ${chatIdToUse}, Store ${selectedStore}: ${response.text}`);
+      console.log(`Response to User ${userIdToUse}, Chat ${chatIdToUse}, Store ${selectedStore}: ${response.text.substring(0, 100)}...`);
       console.log('==============================================');
       
     } catch (error) {

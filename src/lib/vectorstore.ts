@@ -14,36 +14,351 @@ export interface SearchResult {
 // Interface for retriever configuration
 export interface RetrieverConfig {
   k: number;
-  searchType: 'similarity' | 'mmr';
+  searchType: 'similarity' | 'mmr' | 'advanced';
   searchKwargs?: {
     fetchK?: number;
     lambda?: number;
+    threshold?: number;
   };
 }
 
-// Create embeddings
+// Enhanced embedding configuration
 export function createEmbeddings() {
-  console.log('Creating embeddings with OpenAI...');
+  console.log('Creating high-quality embeddings with OpenAI text-embedding-3-large...');
   return new OpenAIEmbeddings({
     modelName: "text-embedding-3-large",
-    dimensions: 3072,
+    dimensions: 3072, // Full dimensions for maximum quality
     stripNewLines: true,
-    batchSize: 512
+    batchSize: 100, // Reduced batch size for better reliability
+    maxRetries: 3
   });
 }
 
-// Alternative embedding configuration for faster but still good performance
-export function createFastEmbeddings() {
-  console.log('Creating fast embeddings with OpenAI...');
+// Balanced embedding configuration for production use
+export function createBalancedEmbeddings() {
+  console.log('Creating balanced embeddings with OpenAI text-embedding-3-small...');
   return new OpenAIEmbeddings({
     modelName: "text-embedding-3-small",
     dimensions: 1536,
     stripNewLines: true,
-    batchSize: 1024
+    batchSize: 200,
+    maxRetries: 3
   });
 }
 
-// Class to manage multiple vector stores
+// Fast embedding configuration for development
+export function createFastEmbeddings() {
+  console.log('Creating fast embeddings with OpenAI ada-002...');
+  return new OpenAIEmbeddings({
+    modelName: "text-embedding-ada-002",
+    stripNewLines: true,
+    batchSize: 512,
+    maxRetries: 2
+  });
+}
+
+// Enhanced Vector Store Manager with user-specific stores
+export class EnhancedVectorStoreManager {
+  private embeddings: OpenAIEmbeddings;
+  private vectorStores: Map<string, HNSWLib> = new Map();
+  private baseDir: string = './vectorstores';
+  private userStoresDir: string = './user-vectorstores';
+  private storeMetadata: Map<string, { created: Date; documentCount: number; lastUpdated: Date }> = new Map();
+  
+  constructor(embeddings: OpenAIEmbeddings) {
+    this.embeddings = embeddings;
+    // Ensure directories exist
+    [this.baseDir, this.userStoresDir].forEach(dir => {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    });
+  }
+
+  // Create vector store for user document
+  async createUserVectorStore(userId: string, filename: string, documentChunks: Document[]): Promise<HNSWLib> {
+    const userDir = path.join(this.userStoresDir, userId);
+    if (!fs.existsSync(userDir)) {
+      fs.mkdirSync(userDir, { recursive: true });
+    }
+
+    const storeName = `${userId}_${filename.replace(/\.[^/.]+$/, "")}`;
+    const storePath = path.join(userDir, filename.replace(/\.[^/.]+$/, ""));
+    
+    console.log(`Creating user vector store: ${storeName} with ${documentChunks.length} chunks`);
+
+    try {
+      // Validate chunks before creating store
+      const validChunks = this.validateAndCleanChunks(documentChunks);
+      
+      if (validChunks.length === 0) {
+        throw new Error('No valid chunks found after processing');
+      }
+
+      // Create embeddings in batches for better reliability
+      const store = await this.createStoreWithBatching(validChunks);
+      
+      // Save the store
+      await store.save(storePath);
+      
+      // Cache the store
+      this.vectorStores.set(storeName, store);
+      
+      // Update metadata
+      this.storeMetadata.set(storeName, {
+        created: new Date(),
+        documentCount: validChunks.length,
+        lastUpdated: new Date()
+      });
+
+      console.log(`User vector store ${storeName} created successfully with ${validChunks.length} chunks`);
+      return store;
+      
+    } catch (error) {
+      console.error(`Failed to create user vector store ${storeName}:`, error);
+      throw new Error(`Vector store creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Create embeddings in batches for better reliability
+  private async createStoreWithBatching(chunks: Document[]): Promise<HNSWLib> {
+    const batchSize = 50; // Process in smaller batches
+    let store: HNSWLib | null = null;
+
+    for (let i = 0; i < chunks.length; i += batchSize) {
+      const batch = chunks.slice(i, i + batchSize);
+      console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(chunks.length / batchSize)} (${batch.length} chunks)`);
+      
+      try {
+        if (store === null) {
+          // Create initial store with first batch
+          store = await HNSWLib.fromDocuments(batch, this.embeddings);
+        } else {
+          // Add subsequent batches
+          await store.addDocuments(batch);
+        }
+        
+        // Small delay between batches to avoid rate limiting
+        if (i + batchSize < chunks.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+      } catch (error) {
+        console.error(`Error processing batch ${Math.floor(i / batchSize) + 1}:`, error);
+        throw error;
+      }
+    }
+
+    if (store === null) {
+      throw new Error('Failed to create vector store');
+    }
+
+    return store;
+  }
+
+  // Validate and clean document chunks
+  private validateAndCleanChunks(chunks: Document[]): Document[] {
+    return chunks
+      .filter(chunk => {
+        const content = chunk.pageContent?.trim();
+        return content && content.length >= 20 && content.length <= 8000;
+      })
+      .map(chunk => {
+        // Clean and enhance the content
+        const cleanContent = chunk.pageContent
+          .replace(/\s+/g, ' ')
+          .replace(/[^\x20-\x7E\u00A0-\uFFFF]/g, '') // Remove control characters
+          .trim();
+
+        return new Document({
+          pageContent: cleanContent,
+          metadata: {
+            ...chunk.metadata,
+            contentLength: cleanContent.length,
+            wordCount: cleanContent.split(/\s+/).length,
+            validated: true,
+            cleanedAt: new Date().toISOString()
+          }
+        });
+      });
+  }
+
+  // Get user vector store
+  async getUserVectorStore(userId: string, filename: string): Promise<HNSWLib | null> {
+    const storeName = `${userId}_${filename.replace(/\.[^/.]+$/, "")}`;
+    
+    // Check if already loaded
+    if (this.vectorStores.has(storeName)) {
+      return this.vectorStores.get(storeName)!;
+    }
+
+    // Try to load from disk
+    const userDir = path.join(this.userStoresDir, userId);
+    const storePath = path.join(userDir, filename.replace(/\.[^/.]+$/, ""));
+    
+    if (!fs.existsSync(storePath)) {
+      return null;
+    }
+
+    try {
+      console.log(`Loading user vector store: ${storeName}`);
+      const store = await HNSWLib.load(storePath, this.embeddings);
+      this.vectorStores.set(storeName, store);
+      return store;
+    } catch (error) {
+      console.error(`Failed to load user vector store ${storeName}:`, error);
+      return null;
+    }
+  }
+
+  // List user vector stores
+  listUserVectorStores(userId: string): string[] {
+    const userDir = path.join(this.userStoresDir, userId);
+    if (!fs.existsSync(userDir)) {
+      return [];
+    }
+
+    return fs.readdirSync(userDir)
+      .filter(item => {
+        const itemPath = path.join(userDir, item);
+        return fs.statSync(itemPath).isDirectory();
+      });
+  }
+
+  // Advanced retriever with multiple strategies
+  getAdvancedRetriever(storeName: string, config: RetrieverConfig = { k: 8, searchType: 'advanced' }) {
+    const store = this.vectorStores.get(storeName);
+    if (!store) {
+      throw new Error(`Vector store ${storeName} not found. Load it first.`);
+    }
+
+    return {
+      getRelevantDocuments: async (query: string): Promise<Document[]> => {
+        try {
+          console.log(`Searching in store ${storeName} for: "${query.substring(0, 50)}..."`);
+          
+          if (config.searchType === 'advanced') {
+            return await this.performAdvancedSearch(store, query, config);
+          } else if (config.searchType === 'mmr') {
+            return await this.performMMRSearch(store, query, config);
+          } else {
+            return await this.performSimilaritySearch(store, query, config);
+          }
+        } catch (error) {
+          console.error('Error in advanced retriever:', error);
+          // Fallback to basic similarity search
+          return await store.similaritySearch(query, Math.min(config.k, 10));
+        }
+      }
+    };
+  }
+
+  // Perform advanced search with multiple strategies and reranking
+  private async performAdvancedSearch(store: HNSWLib, query: string, config: RetrieverConfig): Promise<Document[]> {
+    const k = config.k || 8;
+    const threshold = config.searchKwargs?.threshold || 0.6;
+    
+    // 1. Get similarity results with scores
+    const similarityResults = await store.similaritySearchWithScore(query, k * 3);
+    
+    // 2. Filter by threshold and deduplicate
+    const filteredResults = similarityResults
+      .filter(([doc, score]) => score >= threshold)
+      .map(([doc, score]) => ({ doc, score }));
+
+    // 3. Rerank based on content quality and relevance
+    const rerankedResults = this.rerankResults(filteredResults, query);
+    
+    // 4. Return top k results
+    const finalResults = rerankedResults.slice(0, k).map(result => result.doc);
+    
+    console.log(`Advanced search found ${finalResults.length} relevant documents (threshold: ${threshold})`);
+    return finalResults;
+  }
+
+  // Perform MMR search
+  private async performMMRSearch(store: HNSWLib, query: string, config: RetrieverConfig): Promise<Document[]> {
+    const retriever = store.asRetriever({
+      k: config.k,
+      searchType: 'mmr',
+      searchKwargs: {
+        fetchK: (config.k || 8) * 3,
+        lambda: config.searchKwargs?.lambda || 0.25,
+      },
+    });
+    
+    return await retriever.getRelevantDocuments(query);
+  }
+
+  // Perform similarity search
+  private async performSimilaritySearch(store: HNSWLib, query: string, config: RetrieverConfig): Promise<Document[]> {
+    return await store.similaritySearch(query, config.k || 8);
+  }
+
+  // Rerank results based on content quality and query relevance
+  private rerankResults(results: SearchResult[], query: string): SearchResult[] {
+    const queryLower = query.toLowerCase();
+    const queryWords = queryLower.split(/\s+/).filter(word => word.length > 2);
+    
+    return results
+      .map(result => {
+        const content = result.doc.pageContent.toLowerCase();
+        let relevanceBoost = 0;
+        
+        // Boost for exact phrase matches
+        if (content.includes(queryLower)) {
+          relevanceBoost += 0.2;
+        }
+        
+        // Boost for multiple query word matches
+        const matchingWords = queryWords.filter(word => content.includes(word));
+        relevanceBoost += (matchingWords.length / queryWords.length) * 0.1;
+        
+        // Boost for content quality
+        const metadata = result.doc.metadata;
+        if (metadata.quality === 'high') {
+          relevanceBoost += 0.05;
+        }
+        
+        // Boost for complete thoughts
+        if (metadata.sentenceCount && metadata.sentenceCount > 1) {
+          relevanceBoost += 0.03;
+        }
+        
+        return {
+          ...result,
+          score: result.score + relevanceBoost
+        };
+      })
+      .sort((a, b) => b.score - a.score);
+  }
+
+  // Check if user vector store exists
+  userVectorStoreExists(userId: string, filename: string): boolean {
+    const storeName = `${userId}_${filename.replace(/\.[^/.]+$/, "")}`;
+    
+    if (this.vectorStores.has(storeName)) {
+      return true;
+    }
+    
+    const userDir = path.join(this.userStoresDir, userId);
+    const storePath = path.join(userDir, filename.replace(/\.[^/.]+$/, ""));
+    return fs.existsSync(storePath);
+  }
+
+  // Get vector store metadata
+  getStoreMetadata(storeName: string) {
+    return this.storeMetadata.get(storeName);
+  }
+
+  // Clean up unused stores from memory
+  cleanupMemory(): void {
+    console.log(`Cleaning up ${this.vectorStores.size} stores from memory`);
+    this.vectorStores.clear();
+  }
+}
+
+// Legacy VectorStoreManager class for backward compatibility
 export class VectorStoreManager {
   private embeddings: OpenAIEmbeddings;
   private vectorStores: Map<string, HNSWLib> = new Map();

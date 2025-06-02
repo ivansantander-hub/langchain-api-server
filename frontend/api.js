@@ -1,7 +1,8 @@
 // API Client para LangChain Document Chat
 class APIClient {
     constructor() {
-        this.baseURL = 'https://langchain-api-server-production.up.railway.app';
+        this.baseURL = 'http://localhost:3000';
+        // this.baseURL = 'https://langchain-api-server-production.up.railway.app';
         this.defaultUserId = 'web-client';
         this.defaultChatId = 'default';
         console.log('🚀 ~ APIClient ~ constructor ~ this.baseURL:', this.baseURL)
