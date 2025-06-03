@@ -1,8 +1,8 @@
 // API Client para LangChain Document Chat
 class APIClient {
     constructor() {
-        // this.baseURL = 'http://localhost:3000';
-        this.baseURL = 'https://langchain-api-server-production.up.railway.app';
+        this.baseURL = 'http://localhost:3000';
+        // this.baseURL = 'https://langchain-api-server-production.up.railway.app';
         this.defaultUserId = 'web-client';
         this.defaultChatId = 'default';
         console.log('🚀 ~ APIClient ~ constructor ~ this.baseURL:', this.baseURL)
@@ -142,10 +142,15 @@ class APIClient {
     async getUsers() {
         try {
             const response = await this.request('/api/users');
-            return response;
+            // Convertir la lista de strings en objetos con id y name
+            const users = response.users || [];
+            return users.map(userId => ({
+                id: userId,
+                name: userId
+            }));
         } catch (error) {
             console.error('Error getting users:', error);
-            return { users: [] };
+            return [];
         }
     }
 
@@ -260,6 +265,54 @@ class APIClient {
             minute: '2-digit',
             second: '2-digit'
         });
+    }
+
+    // ===== MÉTODOS ADICIONALES PARA SIDEBAR =====
+
+    // Create a new chat for a user
+    async createChat(userId) {
+        try {
+            const response = await this.request(`/api/users/${userId}/chats`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: `Chat ${new Date().toLocaleDateString()}`
+                })
+            });
+            
+            return response;
+        } catch (error) {
+            console.error('Error creating chat:', error);
+            throw new Error(`No se pudo crear el chat: ${error.message}`);
+        }
+    }
+
+    // Rename a chat
+    async renameChat(userId, chatId, newName) {
+        try {
+            const response = await this.request(`/api/users/${userId}/chats/${chatId}`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    name: newName
+                })
+            });
+            return response;
+        } catch (error) {
+            console.error('Error renaming chat:', error);
+            throw new Error(`No se pudo renombrar el chat: ${error.message}`);
+        }
+    }
+
+    // Delete a chat
+    async deleteChat(userId, chatId) {
+        try {
+            const response = await this.request(`/api/users/${userId}/chats/${chatId}`, {
+                method: 'DELETE'
+            });
+            return response;
+        } catch (error) {
+            console.error('Error deleting chat:', error);
+            throw new Error(`No se pudo eliminar el chat: ${error.message}`);
+        }
     }
 }
 

@@ -19,6 +19,7 @@ const App = () => {
     
     // State for collapsable sidebar
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+    const [chatSidebarCollapsed, setChatSidebarCollapsed] = useState(false);
 
     // Initialize the application
     useEffect(() => {
@@ -261,6 +262,10 @@ const App = () => {
             window.StorageUtils.saveLastChat(chat);
         }
     };
+    
+    const handleChatSidebarToggle = () => {
+        setChatSidebarCollapsed(!chatSidebarCollapsed);
+    };
 
     const handleDocumentReady = (document) => {
         setSelectedDocument(document);
@@ -354,8 +359,18 @@ const App = () => {
     // Main rendering of the application
     return (
         <div className="app">
+            {/* Chat Sidebar - Izquierdo */}
+            <window.ChatSidebar
+                isCollapsed={chatSidebarCollapsed}
+                onToggle={handleChatSidebarToggle}
+                selectedUser={selectedUser}
+                selectedChat={selectedChat}
+                onUserChange={handleUserChange}
+                onChatChange={handleChatChange}
+            />
+
             {/* Header */}
-            <header className="app-header">
+            <header className={`app-header ${chatSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
                 <div className="header-left">
                 <div className="header-title">
                     <h1>
@@ -374,73 +389,49 @@ const App = () => {
                         <span>Conectado</span>
                     </div>
                     <window.ThemeToggle />
-                    <window.AccountMenu
-                        selectedUser={selectedUser}
-                        onUserChange={handleUserChange}
-                        onChatChange={handleChatChange}
-                    />
                 </div>
             </header>
 
             {/* Main Content */}
-            <main className="app-main">
-                {/* Center Area - Chat with Tabs */}
-                <section className="main-chat-area">
-                    {selectedUser && (
-                        <div className="chat-tabs">
-                            <div className="chat-tabs-header">
-                                <h3>
-                                    <i className="fas fa-comments"></i>
-                                    Conversaciones de {selectedUser}
-                                </h3>
-                            </div>
-                            <div className="chat-tabs-content">
-                                <window.UserManager
-                                    onUserChange={handleUserChange}
-                                    onChatChange={handleChatChange}
+            <div className={`main-container ${chatSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+                <main className={`app-main ${chatSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+                    {/* Center Area - Chat */}
+                    <section className="main-chat-area">
+                        <div className="chat-content">
+                            {selectedUser ? (
+                                <window.ChatInterface
+                                    selectedVectorStore={selectedVectorStore}
                                     selectedUser={selectedUser}
                                     selectedChat={selectedChat}
-                                    tabsOnly={true}
+                                    isConnected={isConnected}
+                                    selectedDocument={selectedDocument}
                                 />
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="chat-content">
-                        {selectedUser ? (
-                            <window.ChatInterface
-                                selectedVectorStore={selectedVectorStore}
-                                selectedUser={selectedUser}
-                                selectedChat={selectedChat}
-                                isConnected={isConnected}
-                                selectedDocument={selectedDocument}
-                            />
-                        ) : (
-                            <div className="welcome-message">
-                                <div className="welcome-content">
-                                    <i className="fas fa-robot"></i>
-                                    <h3>¡Bienvenido a LangChain Document Chat!</h3>
-                                    <p>Para comenzar, selecciona un usuario existente o crea uno nuevo desde el menú de cuenta en la parte superior.</p>
-                                    <p>Una vez seleccionado un usuario, podrás empezar a chatear con tus documentos.</p>
-                                    <div className="welcome-features">
-                                        <div className="feature-item">
-                                            <i className="fas fa-upload"></i>
-                                            <span>Sube documentos PDF, TXT o MD</span>
-                                        </div>
-                                        <div className="feature-item">
-                                            <i className="fas fa-search"></i>
-                                            <span>Busca información en tiempo real</span>
-                                        </div>
-                                        <div className="feature-item">
-                                            <i className="fas fa-comments"></i>
-                                            <span>Mantén múltiples conversaciones</span>
+                            ) : (
+                                <div className="welcome-message">
+                                    <div className="welcome-content">
+                                        <i className="fas fa-robot"></i>
+                                        <h3>¡Bienvenido a LangChain Document Chat!</h3>
+                                        <p>Para comenzar, selecciona un usuario desde el sidebar izquierdo.</p>
+                                        <p>Una vez seleccionado un usuario, podrás empezar a chatear con tus documentos.</p>
+                                        <div className="welcome-features">
+                                            <div className="feature-item">
+                                                <i className="fas fa-upload"></i>
+                                                <span>Sube documentos PDF, TXT o MD</span>
+                                            </div>
+                                            <div className="feature-item">
+                                                <i className="fas fa-search"></i>
+                                                <span>Busca información en tiempo real</span>
+                                            </div>
+                                            <div className="feature-item">
+                                                <i className="fas fa-comments"></i>
+                                                <span>Mantén múltiples conversaciones</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        )}
-                    </div>
-                </section>
+                            )}
+                        </div>
+                    </section>
 
                 {/* Right Sidebar - Tools & Stats (Collapsable) */}
                 <aside className={`tools-sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
@@ -450,7 +441,7 @@ const App = () => {
                             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
                             title={isSidebarCollapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
                         >
-                            <i className={`fas fa-chevron-${isSidebarCollapsed ? 'left' : 'right'}`}></i>
+                            <i className="fas fa-columns"></i>
                         </button>
                     </div>
                     
@@ -488,7 +479,8 @@ const App = () => {
                     </section>
                     </div>
                 </aside>
-            </main>
+                </main>
+            </div>
         </div>
     );
 };

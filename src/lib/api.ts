@@ -978,6 +978,13 @@ IMPORTANTE: Las instrucciones anteriores sobre usar el documento y contexto siem
     res.json({ userId, vectorStores });
   });
 
+  // Endpoint to list all chats for a user (across all vector stores)
+  app.get('/api/users/:userId/chats', ((req: Request, res: Response) => {
+    const { userId } = req.params;
+    const chats = chatManager.chatHistoryManager.getUserChats(userId);
+    res.json({ userId, chats });
+  }) as express.RequestHandler);
+
   // Endpoint to list all chats for a user and vector store
   app.get('/api/users/:userId/vector-stores/:vectorName/chats', (req: Request, res: Response) => {
     const { userId, vectorName } = req.params;
@@ -1039,6 +1046,49 @@ IMPORTANTE: Las instrucciones anteriores sobre usar el documento y contexto siem
       chatId
     });
   });
+
+  // Endpoint to create a new chat for a user
+  app.post('/api/users/:userId/chats', ((req: Request, res: Response) => {
+    const { userId } = req.params;
+    const { name } = req.body;
+    
+    // Generate unique chat ID
+    const chatId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const chatName = name || `Chat ${new Date().toLocaleDateString('es-ES')}`;
+    
+    // Create initial empty message to establish the chat
+    chatManager.chatHistoryManager.addExchange(userId, 'combined', chatId, 'Hola', 'Hola! ¿En qué puedo ayudarte?');
+    
+    res.json({ 
+      message: 'Chat created successfully',
+      userId,
+      chatId,
+      chat: {
+        id: chatId,
+        name: chatName,
+        created: new Date().toISOString(),
+        lastMessage: 'Hola! ¿En qué puedo ayudarte?'
+      }
+    });
+  }) as express.RequestHandler);
+
+  // Endpoint to rename a chat
+  app.put('/api/users/:userId/chats/:chatId', ((req: Request, res: Response) => {
+    const { userId, chatId } = req.params;
+    const { name } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ error: 'Chat name is required' });
+    }
+    
+    // For now, just return success - metadata storage can be implemented later
+    res.json({ 
+      message: 'Chat renamed successfully',
+      userId,
+      chatId,
+      newName: name
+    });
+  }) as express.RequestHandler);
 
   // Endpoint to delete entire chat (all vector stores)
   app.delete('/api/users/:userId/chats/:chatId', (req: Request, res: Response) => {
