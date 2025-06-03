@@ -981,9 +981,27 @@ IMPORTANTE: Las instrucciones anteriores sobre usar el documento y contexto siem
   // Endpoint to list all chats for a user (across all vector stores)
   app.get('/api/users/:userId/chats', ((req: Request, res: Response) => {
     const { userId } = req.params;
-    const chats = chatManager.chatHistoryManager.getUserChats(userId);
-    res.json({ userId, chats });
-  }) as express.RequestHandler);
+    
+    try {
+      // Get chats with metadata
+      const chatsWithMetadata = chatManager.chatHistoryManager.getUserChatsWithMetadata(userId);
+      
+      // Transform to expected format for frontend
+      const chats = chatsWithMetadata.map(metadata => metadata.chatId);
+      
+      res.json({ 
+        userId, 
+        chats,
+        metadata: chatsWithMetadata // Include metadata for frontend use
+      });
+    } catch (error) {
+      console.error('Error getting user chats:', error);
+      res.status(500).json({ 
+        error: 'Failed to get user chats',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }) as RequestHandler);
 
   // Endpoint to list all chats for a user and vector store
   app.get('/api/users/:userId/vector-stores/:vectorName/chats', (req: Request, res: Response) => {
@@ -1081,13 +1099,23 @@ IMPORTANTE: Las instrucciones anteriores sobre usar el documento y contexto siem
       return res.status(400).json({ error: 'Chat name is required' });
     }
     
-    // For now, just return success - metadata storage can be implemented later
-    res.json({ 
-      message: 'Chat renamed successfully',
-      userId,
-      chatId,
-      newName: name
-    });
+    try {
+      // Use the new rename functionality from ChatHistoryManager
+      chatManager.chatHistoryManager.renameChatTitle(userId, chatId, name.trim());
+      
+      res.json({ 
+        message: 'Chat renamed successfully',
+        userId,
+        chatId,
+        newName: name.trim()
+      });
+    } catch (error) {
+      console.error('Error renaming chat:', error);
+      res.status(500).json({ 
+        error: 'Failed to rename chat',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
   }) as express.RequestHandler);
 
   // Endpoint to delete entire chat (all vector stores)

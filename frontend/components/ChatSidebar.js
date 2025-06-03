@@ -5,7 +5,8 @@ const ChatSidebar = ({
     selectedUser, 
     selectedChat, 
     onUserChange, 
-    onChatChange 
+    onChatChange, 
+    onChatUpdate
 }) => {
     const [users, setUsers] = React.useState([]);
     const [chats, setChats] = React.useState([]);
@@ -50,25 +51,35 @@ const ChatSidebar = ({
         
         try {
             setIsLoading(true);
-            // Obtener todos los chats del usuario sin filtrar por vector store
+            // Obtener todos los chats del usuario con metadatos
             const response = await window.apiClient.request(`/api/users/${selectedUser}/chats`);
             console.log('Loaded all chats for user:', selectedUser, response);
             
-            // Transformar la respuesta de la API en el formato esperado por el componente
-            const chatIds = response.chats || [];
-            const formattedChats = chatIds.map(chatId => ({
-                id: chatId,
-                name: chatId === 'default' ? 'Chat Principal' : `Chat ${chatId.substring(0, 8)}`,
-                lastMessage: 'Chat existente',
-                timestamp: new Date().toISOString(),
-                messages: []
-            }));
+            // Usar los metadatos si están disponibles, sino crear formato básico
+            if (response.metadata && Array.isArray(response.metadata)) {
+                const formattedChats = response.metadata.map(metadata => ({
+                    id: metadata.chatId,
+                    name: metadata.name || (metadata.chatId === 'default' ? 'Chat Principal' : `Chat ${metadata.chatId.substring(0, 8)}`),
+                    lastActivity: metadata.lastActivity || metadata.created,
+                    messageCount: metadata.messageCount || 0
+                }));
+                
+                // Ordenar por última actividad
+                formattedChats.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
+                setChats(formattedChats);
+            } else {
+                // Fallback al formato anterior
+                const basicChats = response.chats.map(chatId => ({
+                    id: chatId,
+                    name: chatId === 'default' ? 'Chat Principal' : `Chat ${chatId.substring(0, 8)}`
+                }));
+                setChats(basicChats);
+            }
             
-            setChats(formattedChats);
+            setError('');
         } catch (error) {
             console.error('Error loading chats:', error);
-            setError('Error cargando chats');
-            setChats([]);
+            setError(`Error al cargar chats: ${error.message}`);
         } finally {
             setIsLoading(false);
         }
@@ -92,36 +103,73 @@ const ChatSidebar = ({
     };
 
     const handleCreateChat = async () => {
-        if (!selectedUser) return;
+        if (!selectedUser) {
+            setError('Selecciona un usuario primero');
+            return;
+        }
         
         try {
             setIsLoading(true);
-            const response = await window.apiClient.createChat(selectedUser);
-            console.log('Created new chat:', response);
+            const result = await window.apiClient.createChat(selectedUser);
+            
+            console.log('New chat created:', result);
+            
+            // Recargar la lista de chats
             await loadChats();
-            if (onChatChange && response.chat) {
-                onChatChange(response.chat);
+            
+            // Seleccionar el nuevo chat automáticamente
+            if (result.chatId && onChatChange) {
+                onChatChange(result.chatId);
             }
+            
+            // Notificar al componente padre para que actualice otros componentes
+            if (onChatUpdate) {
+                onChatUpdate(result.chatId, { action: 'created' });
+            }
+            
         } catch (error) {
             console.error('Error creating chat:', error);
-            setError('Error creando chat');
+            setError(`Error al crear chat: ${error.message}`);
         } finally {
             setIsLoading(false);
         }
     };
 
-    const handleEditChat = async (chatId) => {
-        if (!editingChatName.trim()) return;
+    const handleEditChat = async (chatId, newName) => {
+        if (!selectedUser || !newName || !newName.trim()) {
+            setError('El nombre del chat no puede estar vacío');
+            cancelEditingChat();
+            return;
+        }
         
         try {
             setIsLoading(true);
-            await window.apiClient.renameChat(selectedUser, chatId, editingChatName.trim());
+            console.log(`Renaming chat ${chatId} to: ${newName}`);
+            
+            // Llamar al API para renombrar el chat
+            const response = await window.apiClient.renameChat(selectedUser, chatId, newName.trim());
+            console.log('Chat renamed successfully:', response);
+            
+            // Actualizar el chat localmente
+            setChats(prevChats => 
+                prevChats.map(chat => 
+                    chat.id === chatId 
+                        ? { ...chat, name: newName.trim() }
+                        : chat
+                )
+            );
+            
+            // Limpiar el estado de edición
             setEditingChatId(null);
             setEditingChatName('');
+            setError(null);
+            
+            // Recargar la lista de chats para asegurar sincronización
             await loadChats();
+            
         } catch (error) {
-            console.error('Error editing chat:', error);
-            setError('Error editando chat');
+            console.error('Error renaming chat:', error);
+            setError(`Error al renombrar chat: ${error.message}`);
         } finally {
             setIsLoading(false);
         }
@@ -150,11 +198,19 @@ const ChatSidebar = ({
     const startEditingChat = (chat) => {
         setEditingChatId(chat.id);
         setEditingChatName(chat.name);
+        setError(null); // Limpiar errores previos
     };
 
     const cancelEditingChat = () => {
         setEditingChatId(null);
         setEditingChatName('');
+        setError(null);
+    };
+
+    const handleEditSubmit = (e, chatId) => {
+        e.preventDefault();
+        e.stopPropagation();
+        handleEditChat(chatId, editingChatName);
     };
 
     const formatChatTime = (timestamp) => {
@@ -304,6 +360,13 @@ const ChatSidebar = ({
                             <div className="error-message">
                                 <i className="fas fa-exclamation-triangle"></i>
                                 {error}
+                                <button 
+                                    className="error-close"
+                                    onClick={() => setError(null)}
+                                    title="Cerrar error"
+                                >
+                                    <i className="fas fa-times"></i>
+                                </button>
                             </div>
                         )}
 
@@ -335,67 +398,111 @@ const ChatSidebar = ({
                                 {filteredChats.map(chat => (
                                     <div 
                                         key={chat.id}
-                                        className={`chat-item ${selectedChat && selectedChat.id === chat.id ? 'active' : ''}`}
-                                        onClick={() => onChatChange(chat)}
+                                        className={`chat-item ${selectedChat && selectedChat.id === chat.id ? 'active' : ''} ${editingChatId === chat.id ? 'editing' : ''}`}
+                                        onClick={() => editingChatId !== chat.id && onChatChange(chat)}
                                     >
                                         <div className="chat-item-content">
                                             <div className="chat-item-header">
                                                 {editingChatId === chat.id ? (
                                                     <form 
                                                         className="chat-edit-form"
-                                                        onSubmit={(e) => {
-                                                            e.preventDefault();
-                                                            handleEditChat(chat.id);
-                                                        }}
+                                                        onSubmit={(e) => handleEditSubmit(e, chat.id)}
+                                                        onClick={(e) => e.stopPropagation()}
                                                     >
                                                         <input
                                                             type="text"
                                                             className="chat-name-input"
                                                             value={editingChatName}
                                                             onChange={(e) => setEditingChatName(e.target.value)}
-                                                            onBlur={() => handleEditChat(chat.id)}
-                                                            onKeyDown={(e) => {
-                                                                if (e.key === 'Escape') {
+                                                            onBlur={(e) => {
+                                                                // Solo ejecutar si el input tiene valor válido
+                                                                if (e.target.value.trim()) {
+                                                                    handleEditChat(chat.id, e.target.value.trim());
+                                                                } else {
                                                                     cancelEditingChat();
                                                                 }
                                                             }}
+                                                            onKeyDown={(e) => {
+                                                                e.stopPropagation();
+                                                                if (e.key === 'Escape') {
+                                                                    cancelEditingChat();
+                                                                } else if (e.key === 'Enter') {
+                                                                    e.preventDefault();
+                                                                    if (editingChatName.trim()) {
+                                                                        handleEditChat(chat.id, editingChatName.trim());
+                                                                    } else {
+                                                                        cancelEditingChat();
+                                                                    }
+                                                                }
+                                                            }}
                                                             autoFocus
+                                                            disabled={isLoading}
                                                         />
+                                                        <div className="edit-form-buttons">
+                                                            <button 
+                                                                type="submit" 
+                                                                className="edit-confirm-btn"
+                                                                disabled={!editingChatName.trim() || isLoading}
+                                                                title="Confirmar"
+                                                            >
+                                                                <i className="fas fa-check"></i>
+                                                            </button>
+                                                            <button 
+                                                                type="button" 
+                                                                className="edit-cancel-btn"
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    cancelEditingChat();
+                                                                }}
+                                                                title="Cancelar"
+                                                            >
+                                                                <i className="fas fa-times"></i>
+                                                            </button>
+                                                        </div>
                                                     </form>
                                                 ) : (
-                                                    <span className="chat-name">{chat.name}</span>
+                                                    <>
+                                                        <span className="chat-name">{chat.name}</span>
+                                                        <span className="chat-time">
+                                                            {formatChatTime(chat.lastActivity || chat.updated_at || chat.created_at)}
+                                                        </span>
+                                                    </>
                                                 )}
-                                                <span className="chat-time">
-                                                    {formatChatTime(chat.updated_at || chat.created_at)}
-                                                </span>
                                             </div>
-                                            <div className="chat-preview">
-                                                {getPreviewText(chat)}
-                                            </div>
+                                            {editingChatId !== chat.id && (
+                                                <div className="chat-preview">
+                                                    {getPreviewText(chat)}
+                                                </div>
+                                            )}
                                         </div>
                                         
-                                        <div className="chat-actions">
-                                            <button 
-                                                className="chat-action-btn"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    startEditingChat(chat);
-                                                }}
-                                                title="Renombrar chat"
-                                            >
-                                                <i className="fas fa-edit"></i>
-                                            </button>
-                                            <button 
-                                                className="chat-action-btn delete"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleDeleteChat(chat.id);
-                                                }}
-                                                title="Eliminar chat"
-                                            >
-                                                <i className="fas fa-trash"></i>
-                                            </button>
-                                        </div>
+                                        {editingChatId !== chat.id && (
+                                            <div className="chat-actions">
+                                                <button 
+                                                    className="chat-action-btn"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        startEditingChat(chat);
+                                                    }}
+                                                    title="Renombrar chat"
+                                                    disabled={isLoading}
+                                                >
+                                                    <i className="fas fa-edit"></i>
+                                                </button>
+                                                <button 
+                                                    className="chat-action-btn delete"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDeleteChat(chat.id);
+                                                    }}
+                                                    title="Eliminar chat"
+                                                    disabled={isLoading}
+                                                >
+                                                    <i className="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -417,5 +524,5 @@ const ChatSidebar = ({
     );
 };
 
-// Exportar el componente
+// Exportar componente
 window.ChatSidebar = ChatSidebar; 

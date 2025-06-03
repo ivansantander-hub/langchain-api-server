@@ -10,12 +10,22 @@ export interface MessageExchange {
   answerTimestamp?: string; // Optional for backward compatibility
 }
 
+// Interface for chat metadata
+export interface ChatMetadata {
+  chatId: string;
+  name: string;
+  created: string;
+  lastActivity: string;
+  messageCount: number;
+}
+
 // Interface for chat history context
 export interface ChatContext {
   userId: string;
   vectorName: string;
   chatId: string;
   history: MessageExchange[];
+  metadata?: ChatMetadata;
 }
 
 // Legacy format for backward compatibility
@@ -25,6 +35,8 @@ export type LegacyHistory = [string, string][];
 export class ChatHistoryManager {
   // Map structure: userId -> chatId -> vectorName -> history
   private histories: Map<string, Map<string, Map<string, MessageExchange[]>>> = new Map();
+  // Map for chat metadata: userId -> chatId -> metadata
+  private chatMetadata: Map<string, Map<string, ChatMetadata>> = new Map();
   private baseDir: string = './chat-histories';
   
   constructor() {
@@ -115,6 +127,74 @@ export class ChatHistoryManager {
     };
     history.push(newExchange);
     this.updateChatHistory(userId, historyVectorName, chatId, history);
+    
+    // Update chat metadata
+    this.updateChatMetadata(userId, chatId, {
+      lastActivity: answerTime.toISOString(),
+      messageCount: history.length
+    });
+  }
+  
+  // Get chat metadata
+  getChatMetadata(userId: string, chatId: string): ChatMetadata | null {
+    if (!this.chatMetadata.has(userId)) {
+      return null;
+    }
+    return this.chatMetadata.get(userId)!.get(chatId) || null;
+  }
+
+  // Create initial chat metadata
+  private createChatMetadata(userId: string, chatId: string): ChatMetadata {
+    const now = new Date().toISOString();
+    return {
+      chatId,
+      name: chatId === 'default' ? 'Chat Principal' : `Chat ${chatId.substring(0, 8)}`,
+      created: now,
+      lastActivity: now,
+      messageCount: 0
+    };
+  }
+
+  // Update chat metadata
+  private updateChatMetadata(userId: string, chatId: string, updates: Partial<ChatMetadata>): void {
+    // Ensure user metadata exists
+    if (!this.chatMetadata.has(userId)) {
+      this.chatMetadata.set(userId, new Map<string, ChatMetadata>());
+    }
+    
+    const userMetadata = this.chatMetadata.get(userId)!;
+    
+    // Get existing metadata or create new one
+    let metadata = userMetadata.get(chatId);
+    if (!metadata) {
+      metadata = this.createChatMetadata(userId, chatId);
+    }
+    
+    // Apply updates
+    Object.assign(metadata, updates);
+    
+    // Save to memory and disk
+    userMetadata.set(chatId, metadata);
+    this.saveChatMetadata(userId, chatId);
+  }
+
+  // Rename chat
+  renameChatTitle(userId: string, chatId: string, newName: string): void {
+    this.updateChatMetadata(userId, chatId, {
+      name: newName,
+      lastActivity: new Date().toISOString()
+    });
+    console.log(`Chat ${userId}/${chatId} renamed to: ${newName}`);
+  }
+
+  // Get all chats with metadata for a user
+  getUserChatsWithMetadata(userId: string): ChatMetadata[] {
+    if (!this.chatMetadata.has(userId)) {
+      return [];
+    }
+    
+    const userMetadata = this.chatMetadata.get(userId)!;
+    return Array.from(userMetadata.values());
   }
   
   // Get the directory path for a user
@@ -131,7 +211,12 @@ export class ChatHistoryManager {
   private getChatHistoryPath(userId: string, vectorName: string, chatId: string): string {
     return path.join(this.getChatDir(userId, chatId), `${vectorName}.json`);
   }
-  
+
+  // Get the file path for chat metadata
+  private getChatMetadataPath(userId: string, chatId: string): string {
+    return path.join(this.getChatDir(userId, chatId), 'metadata.json');
+  }
+
   // Save chat history to disk
   private saveChatHistory(userId: string, vectorName: string, chatId: string): void {
     const userDir = this.getUserDir(userId);
@@ -292,8 +377,13 @@ export class ChatHistoryManager {
         // Load each vector store history
         for (const vectorFile of vectorFiles) {
           const vectorName = vectorFile.replace('.json', '');
+          // Skip metadata.json
+          if (vectorName === 'metadata') continue;
           this.loadChatHistory(userId, vectorName, chatId);
         }
+        
+        // Load chat metadata
+        this.loadChatMetadata(userId, chatId);
       }
     }
   }
@@ -381,6 +471,11 @@ export class ChatHistoryManager {
     // Remove from memory
     userHistories.delete(chatId);
     
+    // Remove metadata from memory
+    if (this.chatMetadata.has(userId)) {
+      this.chatMetadata.get(userId)!.delete(chatId);
+    }
+    
     // Remove from disk
     const chatDir = this.getChatDir(userId, chatId);
     if (fs.existsSync(chatDir)) {
@@ -390,12 +485,69 @@ export class ChatHistoryManager {
         for (const file of files) {
           fs.unlinkSync(path.join(chatDir, file));
         }
-        // Remove the chat directory
+        
+        // Remove the directory itself
         fs.rmdirSync(chatDir);
-        console.log(`Deleted chat completely: ${userId}/${chatId}`);
+        console.log(`Deleted chat directory: ${chatDir}`);
       } catch (error) {
         console.error(`Error deleting chat directory ${chatDir}:`, error);
       }
+    }
+  }
+
+  // Save chat metadata to disk
+  private saveChatMetadata(userId: string, chatId: string): void {
+    const metadata = this.getChatMetadata(userId, chatId);
+    if (!metadata) return;
+
+    const userDir = this.getUserDir(userId);
+    
+    // Ensure user directory exists
+    if (!fs.existsSync(userDir)) {
+      fs.mkdirSync(userDir, { recursive: true });
+    }
+    
+    const chatDir = this.getChatDir(userId, chatId);
+    
+    // Ensure chat directory exists
+    if (!fs.existsSync(chatDir)) {
+      fs.mkdirSync(chatDir, { recursive: true });
+    }
+    
+    const filePath = this.getChatMetadataPath(userId, chatId);
+    fs.writeFileSync(filePath, JSON.stringify(metadata, null, 2));
+  }
+
+  // Load chat metadata from disk
+  private loadChatMetadata(userId: string, chatId: string): void {
+    const filePath = this.getChatMetadataPath(userId, chatId);
+    
+    if (fs.existsSync(filePath)) {
+      try {
+        const fileContent = fs.readFileSync(filePath, 'utf-8');
+        const metadata = JSON.parse(fileContent) as ChatMetadata;
+        
+        // Ensure user metadata map exists
+        if (!this.chatMetadata.has(userId)) {
+          this.chatMetadata.set(userId, new Map<string, ChatMetadata>());
+        }
+        
+        // Store in memory
+        this.chatMetadata.get(userId)!.set(chatId, metadata);
+      } catch (error) {
+        console.error(`Error loading chat metadata for ${userId}/${chatId}:`, error);
+      }
+    } else {
+      // Create default metadata if file doesn't exist
+      const metadata = this.createChatMetadata(userId, chatId);
+      
+      // Ensure user metadata map exists
+      if (!this.chatMetadata.has(userId)) {
+        this.chatMetadata.set(userId, new Map<string, ChatMetadata>());
+      }
+      
+      this.chatMetadata.get(userId)!.set(chatId, metadata);
+      this.saveChatMetadata(userId, chatId);
     }
   }
 } 
