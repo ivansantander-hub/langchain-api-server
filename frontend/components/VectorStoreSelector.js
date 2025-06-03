@@ -39,9 +39,17 @@ const VectorStoreSelector = ({ vectorStores, selectedStore, onStoreChange, isLoa
     console.log('Filtered user vector stores:', userVectorStores);
 
     const handleStoreChange = (e) => {
-        const newStore = e.target.value;
-        console.log('Store selection changed to:', newStore);
-        onStoreChange(newStore);
+        const selectedValue = e.target.value;
+        console.log('Store selection changed to:', selectedValue);
+        
+        // Si el valor seleccionado incluye el prefijo del usuario, removerlo
+        let storeNameToSend = selectedValue;
+        if (selectedUser && selectedValue.startsWith(`${selectedUser}_`)) {
+            storeNameToSend = selectedValue.replace(`${selectedUser}_`, '');
+            console.log('Removed user prefix, sending:', storeNameToSend);
+        }
+        
+        onStoreChange(storeNameToSend);
     };
 
     // Si no hay usuario seleccionado
@@ -81,13 +89,29 @@ const VectorStoreSelector = ({ vectorStores, selectedStore, onStoreChange, isLoa
         );
     }
 
+    // Encontrar el valor seleccionado que corresponde al selectedStore
+    const getSelectedValue = () => {
+        if (!selectedStore || !selectedUser) return '';
+        
+        // Buscar en userVectorStores el que corresponde al selectedStore
+        const matchingStore = userVectorStores.find(store => {
+            // Remover el prefijo del usuario del store.value para comparar
+            const storeNameWithoutPrefix = store.value.startsWith(`${selectedUser}_`) 
+                ? store.value.replace(`${selectedUser}_`, '') 
+                : store.value;
+            return storeNameWithoutPrefix === selectedStore;
+        });
+        
+        return matchingStore ? matchingStore.value : '';
+    };
+
     return (
         <div className="vector-store-selector">
             <div className="document-selector">
                 <select 
                     id="store-select"
                     className="modern-select" 
-                    value={selectedStore || ''} 
+                    value={getSelectedValue()} 
                     onChange={handleStoreChange}
                     disabled={isLoading}
                 >

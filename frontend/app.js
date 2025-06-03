@@ -55,7 +55,9 @@ const App = () => {
         // Auto-seleccionar el primer documento si hay documentos disponibles
         if (userStores.length > 0 && !selectedVectorStore) {
             const firstDoc = userStores[0];
-            setSelectedVectorStore(firstDoc.id);
+            // Usar solo el nombre del documento sin el prefijo del usuario
+            const documentName = firstDoc.filename.replace(/\.[^/.]+$/, "");
+            setSelectedVectorStore(documentName);
             setSelectedDocument({
                 userId: firstDoc.userId,
                 filename: firstDoc.filename,
@@ -112,13 +114,15 @@ const App = () => {
             
             setVectorStores(storesArray);
             
-            // Select the default store or 'combined' if available
-            if (storesArray.includes(defaultStore)) {
-                setSelectedVectorStore(defaultStore);
-            } else if (storesArray.includes('combined')) {
-                setSelectedVectorStore('combined');
-            } else if (storesArray.length > 0) {
-                setSelectedVectorStore(storesArray[0]);
+            // Solo usar stores del sistema si no hay usuario seleccionado
+            if (!selectedUser) {
+                if (storesArray.includes(defaultStore)) {
+                    setSelectedVectorStore(defaultStore);
+                } else if (storesArray.includes('combined')) {
+                    setSelectedVectorStore('combined');
+                } else if (storesArray.length > 0) {
+                    setSelectedVectorStore(storesArray[0]);
+                }
             }
         } catch (error) {
             console.error('Error loading vector stores:', error);
